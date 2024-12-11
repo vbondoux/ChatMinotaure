@@ -21,7 +21,7 @@ openai.api_key = OPENAI_API_KEY
 # Endpoint pour les requêtes POST
 @app.route("/", methods=["POST"])
 def chat_with_openai():
-    logger.info("Endpoint POST '/' appelé")
+    logger.info("POST reçu à l'endpoint '/' avec le body : %s", request.json)
     try:
         user_message = request.json.get("message", "")
         if not user_message:
@@ -36,7 +36,7 @@ def chat_with_openai():
             ],
             max_tokens=100
         )
-        logger.info("Réponse OpenAI générée avec succès")
+        logger.info("Réponse OpenAI générée : %s", response["choices"][0]["message"]["content"])
         return jsonify({"response": response["choices"][0]["message"]["content"].strip()})
 
     except Exception as e:
@@ -46,7 +46,7 @@ def chat_with_openai():
 # Endpoint pour les requêtes GET (vérification de santé)
 @app.route("/", methods=["GET"])
 def health_check():
-    logger.info("Endpoint GET '/' appelé")
+    logger.info("GET reçu à l'endpoint '/'")
     return "OK", 200
 
 # Démarrer le serveur
