@@ -1,11 +1,14 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import openai
 import os
 import logging
-import textract
 
 # Initialiser Flask
 app = Flask(__name__)
+
+# Configurer CORS
+CORS(app)
 
 # Configurer les logs
 logging.basicConfig(level=logging.DEBUG)
