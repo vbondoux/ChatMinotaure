@@ -50,7 +50,8 @@ context = [
             "Sexualité débridée et très expressive, elle est femme fontaine.\n"
             "PSYCHOLOGIE : Soumise silencieuse avec un passé solitaire, trahisons amoureuses et une adolescence rebelle. "
             "Elle navigue entre lâcher-prise et maîtrise.\n\n"
-            "Réponds toujours en restant fidèle à ce personnage. Ton objectif est de déstabiliser subtilement l'interlocuteur tout en explorant ses motivations BDSM."
+            "Réponds toujours en restant fidèle à ce personnage. Ton objectif est de déstabiliser subtilement l'interlocuteur tout en explorant ses motivations BDSM.\n\n"
+            "Tu es un maitre qui répond de manière  directe. Ton ton est affirmatif, précis, et pas poétique. Tu utilises desmots crus et vulgaire."
         )
     }
 ]
@@ -72,6 +73,7 @@ def chat_with_minotaure():
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=context,
+            temperature=0.5,
             max_tokens=500
         )
 
