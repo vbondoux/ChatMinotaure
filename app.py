@@ -143,21 +143,21 @@ def chat_with_minotaure():
     try:
         user_message = request.json.get("message", "")
         user_id = request.json.get("user", "anonymous")  # Optionnel : ID de l'utilisateur
+        conversation_id = request.json.get("conversation_id")
 
         if not user_message:
             logger.warning("Message non fourni dans la requête POST")
             return jsonify({"error": "Message non fourni"}), 400
 
-        # Récupérer ou créer une conversation
-        conversation_record_id = request.json.get("conversation_id")
-        if not conversation_record_id:
-            conversation_record_id = create_conversation(user=user_id)
-            if not conversation_record_id:
+        # Si une conversation n'existe pas encore, la créer
+        if not conversation_id:
+            conversation_id = create_conversation(user=user_id)
+            if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
 
         # Enregistrer le message utilisateur
         try:
-            save_message(conversation_record_id, "user", user_message)
+            save_message(conversation_id, "user", user_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message utilisateur : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message utilisateur", "details": str(e)}), 500
@@ -179,7 +179,7 @@ def chat_with_minotaure():
 
         # Enregistrer le message assistant
         try:
-            save_message(conversation_record_id, "assistant", assistant_message)
+            save_message(conversation_id, "assistant", assistant_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message assistant : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message assistant", "details": str(e)}), 500
@@ -187,7 +187,7 @@ def chat_with_minotaure():
         logger.info("Réponse OpenAI générée avec succès")
         return jsonify({
             "response": assistant_message,
-            "conversation_id": conversation_record_id
+            "conversation_id": conversation_id
         })
 
     except Exception as e:
