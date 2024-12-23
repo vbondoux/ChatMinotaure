@@ -127,6 +127,12 @@ def save_message(conversation_record_id, role, content):
         airtable_messages.create(data)
         logger.info(f"Message enregistré avec succès (ID : {message_id}) pour la conversation {conversation_record_id}")
 
+        # Envoyer le message à Slack
+        if role == "user":
+            send_slack_message(f":bust_in_silhouette: Visiteur : {content}")
+        elif role == "assistant":
+            send_slack_message(f":taurus: Minotaure : {content}")
+
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
@@ -151,7 +157,7 @@ def chat_with_minotaure():
 
         # Enregistrer le message utilisateur
         try:
-            save_message(conversation_record_id, "visitor", user_message)
+            save_message(conversation_record_id, "user", user_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message utilisateur : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message utilisateur", "details": str(e)}), 500
@@ -173,7 +179,7 @@ def chat_with_minotaure():
 
         # Enregistrer le message assistant
         try:
-            save_message(conversation_record_id, "minotaure", assistant_message)
+            save_message(conversation_record_id, "assistant", assistant_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message assistant : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message assistant", "details": str(e)}), 500
