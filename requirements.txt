@@ -4,3 +4,4 @@ textract
 werkzeug
 flask-cors
 pyairtable
+requests
