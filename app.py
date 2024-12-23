@@ -42,7 +42,7 @@ airtable_conversations = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONVERSATIO
 airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
 
 # Fonction pour envoyer un message sur Slack
-def send_slack_message(conversation_id, channel="#conversationsite"):
+def send_slack_message(text, channel="#conversationsite"):
     try:
         slack_token = os.getenv("SLACK_BOT_TOKEN")  # Récupérer le token Slack depuis les variables d'environnement
         if not slack_token:
@@ -56,12 +56,12 @@ def send_slack_message(conversation_id, channel="#conversationsite"):
         }
         data = {
             "channel": channel,
-            "text": f"Une nouvelle conversation a été démarrée.\n\nConversation ID : {conversation_id}"
+            "text": text
         }
 
         response = requests.post(url, headers=headers, json=data)
         if response.status_code == 200 and response.json().get("ok"):
-            logger.info(f"Message Slack envoyé au canal {channel} pour la conversation {conversation_id}")
+            logger.info(f"Message Slack envoyé au canal {channel}: {text}")
         else:
             logger.error(f"Erreur lors de l'envoi du message Slack : {response.text}")
     except Exception as e:
@@ -103,8 +103,8 @@ def create_conversation(user=None):
         record = airtable_conversations.create(data)  # Enregistre la conversation
         record_id = record["id"]  # Récupère le Record ID généré par Airtable
 
-        # Envoyer une notification Slack
-        send_slack_message(record_id)
+        # Envoyer un message Slack pour le démarrage de la conversation
+        send_slack_message(":ox: Une conversation vient de démarrer sur le site du Minotaure.")
 
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
         return record_id  # Retourne le Record ID
@@ -126,6 +126,13 @@ def save_message(conversation_record_id, role, content):
         logger.debug(f"Tentative d'enregistrement du message : {data}")
         airtable_messages.create(data)
         logger.info(f"Message enregistré avec succès (ID : {message_id}) pour la conversation {conversation_record_id}")
+
+        # Envoyer le message à Slack
+        if role == "user":
+            send_slack_message(f":speech_balloon: Utilisateur : {content}")
+        elif role == "assistant":
+            send_slack_message(f":robot_face: Assistant : {content}")
+
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
