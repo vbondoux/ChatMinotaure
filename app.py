@@ -41,6 +41,29 @@ airtable_context = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONTEXT)
 airtable_conversations = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONVERSATIONS)
 airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
 
+# Fonction pour charger le contexte initial depuis Airtable
+def load_context_from_airtable():
+    try:
+        records = airtable_context.all(max_records=1, sort=["Timestamp"])
+        if not records:
+            logger.error("Aucun contexte trouvé dans Airtable.")
+            return []
+
+        first_record = records[0]["fields"]
+        context = [{"role": first_record["Role"], "content": first_record["Content"]}]
+        logger.info("Contexte initial chargé avec succès depuis Airtable.")
+        return context
+    except Exception as e:
+        logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
+        return []
+
+# Charger le contexte initial
+context = load_context_from_airtable()
+
+if not context:
+    logger.error("Impossible de démarrer l'application sans contexte initial.")
+    raise ValueError("Contexte initial manquant.")
+
 # Fonction pour envoyer un message sur Slack
 def send_slack_message(text, channel="#conversationsite"):
     try:
@@ -128,10 +151,11 @@ def chat_with_minotaure():
         # Enregistrer le message utilisateur
         save_message(conversation_id, "user", user_message)
 
-        # Appeler OpenAI
+        # Appeler OpenAI avec le contexte enrichi
+        enriched_context = context + [{"role": "user", "content": user_message}]
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_message}],
+            messages=enriched_context,
             temperature=0.5,
             max_tokens=500
         )
