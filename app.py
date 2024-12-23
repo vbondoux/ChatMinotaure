@@ -104,7 +104,7 @@ def create_conversation(user=None):
         record_id = record["id"]  # Récupère le Record ID généré par Airtable
 
         # Envoyer un message Slack pour le démarrage de la conversation
-        send_slack_message(":ox: Une conversation vient de démarrer sur le site du Minotaure.")
+        send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
 
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
         return record_id  # Retourne le Record ID
@@ -126,12 +126,6 @@ def save_message(conversation_record_id, role, content):
         logger.debug(f"Tentative d'enregistrement du message : {data}")
         airtable_messages.create(data)
         logger.info(f"Message enregistré avec succès (ID : {message_id}) pour la conversation {conversation_record_id}")
-
-        # Envoyer le message à Slack
-        if role == "user":
-            send_slack_message(f":speech_balloon: Utilisateur : {content}")
-        elif role == "assistant":
-            send_slack_message(f":robot_face: Assistant : {content}")
 
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
@@ -157,7 +151,7 @@ def chat_with_minotaure():
 
         # Enregistrer le message utilisateur
         try:
-            save_message(conversation_record_id, "user", user_message)
+            save_message(conversation_record_id, "visitor", user_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message utilisateur : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message utilisateur", "details": str(e)}), 500
@@ -179,7 +173,7 @@ def chat_with_minotaure():
 
         # Enregistrer le message assistant
         try:
-            save_message(conversation_record_id, "assistant", assistant_message)
+            save_message(conversation_record_id, "minotaure", assistant_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message assistant : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message assistant", "details": str(e)}), 500
