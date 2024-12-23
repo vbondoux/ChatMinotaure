@@ -73,27 +73,28 @@ def create_conversation(user=None):
             "StartTimestamp": datetime.now().isoformat()
         }
         logger.debug(f"Tentative de création d'une conversation : {data}")
-        airtable_conversations.create(data)
-        logger.info(f"Nouvelle conversation créée avec ID : {conversation_id}")
-        return conversation_id
+        record = airtable_conversations.create(data)  # Enregistre la conversation
+        record_id = record["id"]  # Récupère le Record ID généré par Airtable
+        logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
+        return record_id  # Retourne le Record ID
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None
 
 # Fonction pour enregistrer un message
-def save_message(conversation_id, role, content):
+def save_message(conversation_record_id, role, content):
     try:
         message_id = str(uuid.uuid4())
         data = {
             "MessageID": message_id,
-            "ConversationID": [conversation_id],
+            "ConversationID": [conversation_record_id],
             "Role": role,
             "Content": content,
             "Timestamp": datetime.now().isoformat()
         }
         logger.debug(f"Tentative d'enregistrement du message : {data}")
         airtable_messages.create(data)
-        logger.info(f"Message enregistré avec succès (ID : {message_id}) pour la conversation {conversation_id}")
+        logger.info(f"Message enregistré avec succès (ID : {message_id}) pour la conversation {conversation_record_id}")
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
@@ -110,15 +111,15 @@ def chat_with_minotaure():
             return jsonify({"error": "Message non fourni"}), 400
 
         # Récupérer ou créer une conversation
-        conversation_id = request.json.get("conversation_id")
-        if not conversation_id:
-            conversation_id = create_conversation(user=user_id)
-            if not conversation_id:
+        conversation_record_id = request.json.get("conversation_id")
+        if not conversation_record_id:
+            conversation_record_id = create_conversation(user=user_id)
+            if not conversation_record_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
 
         # Enregistrer le message utilisateur
         try:
-            save_message(conversation_id, "user", user_message)
+            save_message(conversation_record_id, "user", user_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message utilisateur : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message utilisateur", "details": str(e)}), 500
@@ -140,7 +141,7 @@ def chat_with_minotaure():
 
         # Enregistrer le message assistant
         try:
-            save_message(conversation_id, "assistant", assistant_message)
+            save_message(conversation_record_id, "assistant", assistant_message)
         except Exception as e:
             logger.error(f"Erreur lors de l'enregistrement du message assistant : {e}")
             return jsonify({"error": "Erreur lors de l'enregistrement du message assistant", "details": str(e)}), 500
@@ -148,7 +149,7 @@ def chat_with_minotaure():
         logger.info("Réponse OpenAI générée avec succès")
         return jsonify({
             "response": assistant_message,
-            "conversation_id": conversation_id
+            "conversation_id": conversation_record_id
         })
 
     except Exception as e:
