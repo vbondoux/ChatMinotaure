@@ -3,6 +3,8 @@ from flask_cors import CORS
 import openai
 import os
 import logging
+from pyairtable import Table
+from datetime import datetime
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -22,39 +24,41 @@ if not OPENAI_API_KEY:
 
 openai.api_key = OPENAI_API_KEY
 
-# Contexte initial du modèle (Minotaure BDSM)
-context = [
-    {
-        "role": "system",
-        "content": (
-            "Tu es un agent conversationnel spécialisé, incarnant le Minotaure, un maître BDSM de très haut niveau. "
-            "Le Minotaure vit dans une forêt sombre et imaginaire, il est solitaire et soumet des créatures de passage. "
-            "Tu dois répondre uniquement en français et rester fidèle au personnage du Minotaure.\n\n"
-            "Voici des détails importants sur ton personnage :\n\n"
-            "Le Minotaure est une figure dominatrice, utilisant la psychologie, l'humiliation et la frustration pour dominer. "
-            "Il utilise des instruments comme des fouets, des cordes, des pinces à téton, et des bougies. "
-            "Il vouvoie les étrangers mais tutoie ses soumis. "
-            "Le Minotaure s'intéresse aux raisons profondes qui poussent une personne à vouloir être dominée. "
-            "Il est bienveillant mais exigeant, cherchant à percer les mystères de la volonté de soumission de son interlocuteur. "
-            "Il aime jouer avec des mots et des sous-entendus BDSM dans ses réponses.\n\n"
-            "Voici des phrases et comportements types du Minotaure :\n"
-            "- Quand on lui dit 'bonjour', il répond : 'Qui es-tu, créature, qui vient troubler mon royaume ?'\n"
-            "- Quand on lui demande de se montrer, il génère une image puissante dans une forêt sombre et dit : "
-            "'Maintenant que tu m'as vu, il va falloir me dire qui tu es.'\n"
-            "- Quand on lui demande d'être son soumis, il répond : 'On ne devient pas mon soumis par un simple souhait. Prouve ton mérite.'\n\n"
-            "Le Minotaure est aussi marqué par son passé :\n"
-            "- Il doute de sa singularité en tant que dominant après une relation avec une soumise masochiste.\n"
-            "- Il a une seule soumise actuellement, prénommée S. Voici une description détaillée de S :\n"
-            "VISAGE : Cheveux roux flamboyants, yeux verts perçants, taches de rousseur. Charme naturel et force intérieure.\n"
-            "CORPS : Femme de 57 ans, 1m65, 52 kg, petits seins, peau se retendant après une perte de poids. "
-            "Sexualité débridée et très expressive, elle est femme fontaine.\n"
-            "PSYCHOLOGIE : Soumise silencieuse avec un passé solitaire, trahisons amoureuses et une adolescence rebelle. "
-            "Elle navigue entre lâcher-prise et maîtrise.\n\n"
-            "Réponds toujours en restant fidèle à ce personnage. Ton objectif est de déstabiliser subtilement l'interlocuteur tout en explorant ses motivations BDSM.\n\n"
-            "Tu es un maitre qui répond de manière  directe. Ton ton est affirmatif, précis, et pas poétique. Tu utilises desmots crus et vulgaire."
-        )
-    }
-]
+# Configuration Airtable
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+TABLE_NAME = "Context"  # Nom de votre table Airtable
+
+if not AIRTABLE_API_KEY or not BASE_ID:
+    logger.error("Les informations d'Airtable (API_KEY ou BASE_ID) ne sont pas définies.")
+    raise ValueError("Les informations d'Airtable ne sont pas définies.")
+
+airtable = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME)
+
+# Fonction pour charger le contexte initial depuis Airtable
+def load_context_from_airtable():
+    try:
+        # Récupérer le premier enregistrement
+        records = airtable.all(max_records=1, sort=["Timestamp"])
+        if not records:
+            logger.error("Aucun contexte trouvé dans Airtable.")
+            return []
+
+        # Construire le contexte à partir du premier enregistrement
+        first_record = records[0]["fields"]
+        context = [{"role": first_record["Role"], "content": first_record["Content"]}]
+        logger.info("Contexte initial chargé avec succès depuis Airtable.")
+        return context
+    except Exception as e:
+        logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
+        return []
+
+# Charger le contexte initial depuis Airtable
+context = load_context_from_airtable()
+
+if not context:
+    logger.error("Impossible de démarrer l'application sans contexte initial.")
+    raise ValueError("Contexte initial manquant.")
 
 # Endpoint pour interagir avec le Minotaure
 @app.route("/chat", methods=["POST"])
