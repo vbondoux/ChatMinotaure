@@ -47,8 +47,8 @@ airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
 def send_email_alert(conversation_id, user_email="maitreminotaure@gmail.com"):
     try:
         # Configurer l'email
-        sender_email = "votre.email@gmail.com"  # Remplacez par votre adresse Gmail
-        sender_password = "votre_mot_de_passe"  # Remplacez par votre mot de passe Gmail
+        sender_email = "maitreminotaure@gmail.com"  # Remplacez par votre adresse Gmail
+        sender_password = "Alliance24!!"  # Remplacez par votre mot de passe Gmail
         recipient_email = user_email
 
         # Contenu de l'email
