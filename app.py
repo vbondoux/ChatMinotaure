@@ -6,6 +6,9 @@ import logging
 from pyairtable import Table
 from datetime import datetime
 import uuid
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -39,6 +42,36 @@ if not AIRTABLE_API_KEY or not BASE_ID:
 airtable_context = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONTEXT)
 airtable_conversations = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONVERSATIONS)
 airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
+
+# Fonction pour envoyer un email
+def send_email_alert(conversation_id, user_email="maitreminotaure@gmail.com"):
+    try:
+        # Configurer l'email
+        sender_email = "votre.email@gmail.com"  # Remplacez par votre adresse Gmail
+        sender_password = "votre_mot_de_passe"  # Remplacez par votre mot de passe Gmail
+        recipient_email = user_email
+
+        # Contenu de l'email
+        subject = "Nouvelle Conversation Démarrée"
+        body = f"Une nouvelle conversation a été démarrée.\n\nConversation ID : {conversation_id}"
+
+        # Création de l'email
+        message = MIMEMultipart()
+        message["From"] = sender_email
+        message["To"] = recipient_email
+        message["Subject"] = subject
+        message.attach(MIMEText(body, "plain"))
+
+        # Connexion au serveur SMTP
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()  # Sécurise la connexion
+            server.login(sender_email, sender_password)  # Authentifie
+            server.send_message(message)  # Envoie l'email
+
+        logger.info(f"Email d'alerte envoyé à {recipient_email} pour la conversation {conversation_id}")
+
+    except Exception as e:
+        logger.error(f"Erreur lors de l'envoi de l'email : {e}")
 
 # Fonction pour charger le contexte initial depuis Airtable
 def load_context_from_airtable():
@@ -75,6 +108,10 @@ def create_conversation(user=None):
         logger.debug(f"Tentative de création d'une conversation : {data}")
         record = airtable_conversations.create(data)  # Enregistre la conversation
         record_id = record["id"]  # Récupère le Record ID généré par Airtable
+
+        # Envoi de l'email d'alerte
+        send_email_alert(record_id)
+
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
         return record_id  # Retourne le Record ID
     except Exception as e:
