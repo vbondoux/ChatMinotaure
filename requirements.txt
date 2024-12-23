@@ -3,3 +3,4 @@ openai==0.28.0
 textract
 werkzeug
 flask-cors
+pyairtable
