@@ -21,8 +21,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
 BASE_ID = os.getenv("AIRTABLE_BASE_ID")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 
-if not OPENAI_API_KEY or not AIRTABLE_API_KEY or not BASE_ID or not SLACK_BOT_TOKEN:
+if not OPENAI_API_KEY or not AIRTABLE_API_KEY or not BASE_ID or not SLACK_BOT_TOKEN or not SLACK_WEBHOOK_URL:
     raise ValueError("Les variables d'environnement nécessaires ne sont pas toutes définies.")
 
 openai.api_key = OPENAI_API_KEY
@@ -41,6 +42,23 @@ def update_mode(conversation_id, mode):
         return True
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour du mode : {e}")
+        return False
+
+# Fonction pour envoyer un message à Slack
+def send_message_to_slack(channel, text):
+    try:
+        url = "https://slack.com/api/chat.postMessage"
+        headers = {"Authorization": f"Bearer {SLACK_BOT_TOKEN}", "Content-Type": "application/json"}
+        data = {"channel": channel, "text": text}
+
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return True
+        else:
+            logger.error(f"Erreur lors de l'envoi à Slack : {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Erreur lors de l'envoi à Slack : {e}")
         return False
 
 # Route pour gérer les commandes Slack
@@ -68,32 +86,6 @@ def slack_command():
     else:
         return jsonify({"text": "Commande non reconnue. Essayez 'le Minotaure est là' ou 'le Minotaure part'."}), 400
 
-# Route pour recevoir les réponses Slack et les relayer au visiteur
-@app.route("/slack-response", methods=["POST"])
-def slack_response():
-    data = request.json
-    conversation_id = data.get("conversation_id")
-    message = data.get("text")
-
-    if not conversation_id or not message:
-        return jsonify({"error": "ID de conversation ou message manquant"}), 400
-
-    # Enregistrer la réponse dans Airtable
-    try:
-        airtable_messages.create({
-            "ConversationID": [conversation_id],
-            "Role": "assistant",
-            "Content": message,
-            "Timestamp": datetime.now().isoformat()
-        })
-        logger.info(f"Réponse Slack enregistrée pour la conversation {conversation_id}")
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement de la réponse Slack : {e}")
-        return jsonify({"error": "Erreur lors de l'enregistrement du message"}), 500
-
-    # Relayer au client (ajoutez ici votre logique si nécessaire)
-    return jsonify({"message": "Réponse relayée avec succès"}), 200
-
 # Route principale du chatbot
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -115,21 +107,9 @@ def chat():
 
     # Si le mode est manuel, rediriger vers Slack
     if mode == "manuel":
-        try:
-            url = "https://slack.com/api/chat.postMessage"
-            headers = {"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}
-            data = {
-                "channel": "#conversationsite",
-                "text": f":bust_in_silhouette: Visiteur : {user_message} (ID: {conversation_id})"
-            }
-            response = requests.post(url, headers=headers, json=data)
-            if response.status_code == 200:
-                return jsonify({"message": "Message envoyé à Slack"}), 200
-            else:
-                logger.error(f"Erreur lors de l'envoi à Slack : {response.text}")
-                return jsonify({"error": "Erreur lors de l'envoi à Slack"}), 500
-        except Exception as e:
-            logger.error(f"Erreur lors de l'envoi à Slack : {e}")
+        if send_message_to_slack("#conversationsite", f":bust_in_silhouette: Visiteur : {user_message} (ID: {conversation_id})"):
+            return jsonify({"message": "Message envoyé à Slack"}), 200
+        else:
             return jsonify({"error": "Erreur lors de l'envoi à Slack"}), 500
 
     # Mode automatique (logique IA actuelle)
