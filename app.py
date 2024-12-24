@@ -111,13 +111,15 @@ def create_conversation(user=None):
         # Envoyer un message Slack et récupérer le thread_ts
         thread_ts = send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
         if thread_ts:
-            airtable_conversations.update(record_id, {"SlackThreadTS": thread_ts})
+            # Convertir le thread_ts en chaîne et l'enregistrer
+            airtable_conversations.update(record_id, {"SlackThreadTS": str(thread_ts)})
 
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
         return record_id, thread_ts
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None, None
+
 
 # Fonction pour enregistrer un message
 def save_message(conversation_record_id, role, content):
