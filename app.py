@@ -155,11 +155,11 @@ def chat_with_minotaure():
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
         else:
             # Récupérer le thread_ts de la conversation existante
-            record = airtable_conversations.search("ConversationID", conversation_id)
-            if record:
-                thread_ts = record[0]["fields"].get("SlackThreadTS")
-            else:
-                return jsonify({"error": "Conversation introuvable"}), 404
+           records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+        if records:
+            thread_ts = records[0]["fields"].get("SlackThreadTS")
+        else:
+            return jsonify({"error": "Conversation introuvable"}), 404
 
         # Enregistrer le message utilisateur
         save_message(conversation_id, "user", user_message)
