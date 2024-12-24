@@ -153,10 +153,16 @@ def chat_with_minotaure():
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
         else:
             # Récupérer le thread_ts de la conversation existante
+            logger.debug(f"Recherche de la conversation avec ID : {conversation_id}")
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if records:
                 thread_ts = records[0]["fields"].get("SlackThreadTS")
+                logger.debug(f"Thread Slack récupéré : {thread_ts}")
+                if not thread_ts:
+                    logger.error(f"Thread Slack introuvable pour la conversation ID : {conversation_id}")
+                    return jsonify({"error": "Thread Slack introuvable"}), 500
             else:
+                logger.error(f"Conversation introuvable pour ID : {conversation_id}")
                 return jsonify({"error": "Conversation introuvable"}), 404
 
         # Enregistrer le message utilisateur
@@ -164,6 +170,7 @@ def chat_with_minotaure():
 
         # Ajouter le message utilisateur au contexte
         context.append({"role": "user", "content": user_message})
+        logger.debug(f"Contexte avant appel OpenAI : {context}")
 
         # Appeler OpenAI
         response = openai.ChatCompletion.create(
@@ -189,6 +196,7 @@ def chat_with_minotaure():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
+
 
 # Endpoint de vérification de santé
 @app.route("/", methods=["GET"])
