@@ -154,16 +154,21 @@ def chat_with_minotaure():
         else:
             # Récupérer le thread_ts de la conversation existante
             logger.debug(f"Recherche de la conversation avec ID : {conversation_id}")
-            records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
-            if records:
-                thread_ts = records[0]["fields"].get("SlackThreadTS")
-                logger.debug(f"Thread Slack récupéré : {thread_ts}")
-                if not thread_ts:
-                    logger.error(f"Thread Slack introuvable pour la conversation ID : {conversation_id}")
-                    return jsonify({"error": "Thread Slack introuvable"}), 500
-            else:
-                logger.error(f"Conversation introuvable pour ID : {conversation_id}")
-                return jsonify({"error": "Conversation introuvable"}), 404
+            try:
+                records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+                logger.debug(f"Résultats de la requête Airtable : {records}")
+                if len(records) > 0:
+                    thread_ts = records[0]["fields"].get("SlackThreadTS")
+                    logger.debug(f"Thread Slack récupéré : {thread_ts}")
+                    if not thread_ts:
+                        logger.error(f"Thread Slack introuvable pour la conversation ID : {conversation_id}")
+                        return jsonify({"error": "Thread Slack introuvable"}), 500
+                else:
+                    logger.error(f"Aucun enregistrement trouvé pour ID : {conversation_id}")
+                    return jsonify({"error": "Conversation introuvable"}), 404
+            except Exception as e:
+                logger.error(f"Erreur lors de la requête Airtable : {e}")
+                return jsonify({"error": "Erreur interne"}), 500
 
         # Enregistrer le message utilisateur
         save_message(conversation_id, "user", user_message)
@@ -196,6 +201,7 @@ def chat_with_minotaure():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
+
 
 
 # Endpoint de vérification de santé
