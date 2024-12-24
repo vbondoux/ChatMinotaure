@@ -41,7 +41,7 @@ def create_new_conversation():
         record = airtable_conversations.create({
             "ConversationID": conversation_id,
             "Mode": "automatique",
-            "Timestamp": datetime.now().isoformat()
+            "StartTimestamp": datetime.now().isoformat()
         })
         logger.info(f"Nouvelle conversation créée avec l'ID : {conversation_id}")
         return conversation_id
