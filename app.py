@@ -10,30 +10,62 @@ import requests
 
 # Initialiser Flask
 app = Flask(__name__)
+
+# Configurer CORS
 CORS(app)
 
 # Configurer les logs
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Charger les clés API
+# Charger la clé API d'OpenAI
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
-BASE_ID = os.getenv("AIRTABLE_BASE_ID")
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-
-if not OPENAI_API_KEY or not AIRTABLE_API_KEY or not BASE_ID or not SLACK_BOT_TOKEN:
-    raise ValueError("Les variables d'environnement nécessaires ne sont pas toutes définies.")
+if not OPENAI_API_KEY:
+    logger.error("La clé API d'OpenAI (OPENAI_API_KEY) n'est pas définie dans les variables d'environnement.")
+    raise ValueError("La clé API d'OpenAI n'est pas définie.")
 
 openai.api_key = OPENAI_API_KEY
 
 # Configuration Airtable
-TABLE_NAME_CONTEXT = "Context"
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+TABLE_NAME_CONTEXT = "Context"  # Nom de la table pour le contexte
 TABLE_NAME_CONVERSATIONS = "Conversations"
 TABLE_NAME_MESSAGES = "Messages"
+
+if not AIRTABLE_API_KEY or not BASE_ID:
+    logger.error("Les informations d'Airtable (API_KEY ou BASE_ID) ne sont pas définies.")
+    raise ValueError("Les informations d'Airtable ne sont pas définies.")
+
 airtable_context = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONTEXT)
 airtable_conversations = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONVERSATIONS)
 airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
+
+# Fonction pour envoyer un message sur Slack
+def send_slack_message(text, channel="#conversationsite"):
+    try:
+        slack_token = os.getenv("SLACK_BOT_TOKEN")
+        if not slack_token:
+            logger.error("Le token Slack (SLACK_BOT_TOKEN) n'est pas défini dans les variables d'environnement.")
+            return
+
+        url = "https://slack.com/api/chat.postMessage"
+        headers = {
+            "Authorization": f"Bearer {slack_token}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "channel": channel,
+            "text": text
+        }
+
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200 and response.json().get("ok"):
+            logger.info(f"Message Slack envoyé au canal {channel}: {text}")
+        else:
+            logger.error(f"Erreur lors de l'envoi du message Slack : {response.text}")
+    except Exception as e:
+        logger.error(f"Erreur lors de l'envoi du message Slack : {e}")
 
 # Fonction pour charger le contexte initial depuis Airtable
 def load_context_from_airtable():
@@ -59,153 +91,94 @@ if not context:
     raise ValueError("Contexte initial manquant.")
 
 # Fonction pour créer une nouvelle conversation
-def create_new_conversation():
+def create_conversation(user=None):
     try:
         conversation_id = str(uuid.uuid4())
-        logger.debug(f"Tentative de création d'une conversation avec ID : {conversation_id}")
-        record = airtable_conversations.create({
+        data = {
             "ConversationID": conversation_id,
-            "Mode": "automatique",
+            "User": user or "anonymous",
             "StartTimestamp": datetime.now().isoformat()
-        })
-        logger.info(f"Nouvelle conversation créée avec l'ID : {conversation_id}")
-        return conversation_id
+        }
+        record = airtable_conversations.create(data)
+        record_id = record["id"]
+
+        # Envoyer un message Slack pour le démarrage de la conversation
+        send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
+
+        logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
+        return record_id
     except Exception as e:
-        logger.error(f"Erreur lors de la création d'une nouvelle conversation : {e}")
+        logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None
 
-# Fonction pour envoyer un message à Slack
-def send_message_to_slack(channel, text):
+# Fonction pour enregistrer un message
+def save_message(conversation_record_id, role, content):
     try:
-        url = "https://slack.com/api/chat.postMessage"
-        headers = {"Authorization": f"Bearer {SLACK_BOT_TOKEN}", "Content-Type": "application/json"}
-        data = {"channel": channel, "text": text}
-
-        logger.debug(f"Tentative d'envoi à Slack : {data}")
-        response = requests.post(url, headers=headers, json=data)
-        logger.debug(f"Réponse Slack : {response.status_code}, {response.text}")
-
-        if response.status_code == 200 and response.json().get("ok"):
-            logger.info(f"Message envoyé à Slack : {text}")
-            return True
-        else:
-            logger.error(f"Erreur lors de l'envoi à Slack : {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"Erreur lors de l'envoi à Slack : {e}")
-        return False
-
-
-# Route principale du chatbot
-@app.route("/chat", methods=["POST"])
-def chat():
-    user_message = request.json.get("message", "")
-    conversation_id = request.json.get("conversation_id")
-
-    if not user_message:
-        return jsonify({"error": "Message manquant"}), 400
-
-    # Si aucun conversation_id n'est fourni ou si la conversation est introuvable, créer une nouvelle conversation
-    if not conversation_id:
-        conversation_id = create_new_conversation()
-        if not conversation_id:
-            return jsonify({"error": "Erreur lors de la création d'une nouvelle conversation"}), 500
-    else:
-        try:
-            record = airtable_conversations.first(formula=f"{{ConversationID}} = '{conversation_id}'")
-            if not record:
-                conversation_id = create_new_conversation()
-                if not conversation_id:
-                    return jsonify({"error": "Erreur lors de la création d'une nouvelle conversation"}), 500
-        except Exception as e:
-            logger.error(f"Erreur lors de la vérification de la conversation : {e}")
-            return jsonify({"error": "Erreur lors de la vérification de la conversation"}), 500
-
-    # Récupérer le mode de la conversation
-    try:
-        record = airtable_conversations.first(formula=f"{{ConversationID}} = '{conversation_id}'")
-        mode = record["fields"].get("Mode", "automatique")
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération du mode : {e}")
-        return jsonify({"error": "Erreur lors de la récupération du mode"}), 500
-
-    # Enregistrer le message de l'utilisateur dans Airtable
-    try:
-        airtable_messages.create({
-            "ConversationID": [record["id"]],
-            "Role": "user",
-            "Content": user_message,
+        message_id = str(uuid.uuid4())
+        data = {
+            "MessageID": message_id,
+            "ConversationID": [conversation_record_id],
+            "Role": role,
+            "Content": content,
             "Timestamp": datetime.now().isoformat()
-        })
+        }
+        airtable_messages.create(data)
+
+        # Envoyer le message à Slack
+        if role == "user":
+            send_slack_message(f":bust_in_silhouette: Visiteur : {content}")
+        elif role == "assistant":
+            send_slack_message(f":taurus: Minotaure : {content}")
     except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement du message utilisateur : {e}")
-        return jsonify({"error": "Erreur lors de l'enregistrement du message utilisateur"}), 500
+        logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
-    # Si le mode est manuel, rediriger vers Slack
-    if mode == "manuel":
-        if send_message_to_slack("#conversationsite", f":bust_in_silhouette: Visiteur : {user_message} (ID: {conversation_id})"):
-            return jsonify({"message": "Message envoyé à Slack", "conversation_id": conversation_id}), 200
-        else:
-            return jsonify({"error": "Erreur lors de l'envoi à Slack"}), 500
-
-    # Mode automatique (logique IA actuelle)
+@app.route("/chat", methods=["POST"])
+def chat_with_minotaure():
     try:
-        enriched_context = context + [{"role": "user", "content": user_message}]
+        user_message = request.json.get("message", "")
+        user_id = request.json.get("user", "anonymous")
+        conversation_id = request.json.get("conversation_id")
+
+        if not user_message:
+            return jsonify({"error": "Message non fourni"}), 400
+
+        # Si une conversation n'existe pas encore, la créer
+        if not conversation_id:
+            conversation_id = create_conversation(user=user_id)
+            if not conversation_id:
+                return jsonify({"error": "Impossible de créer une conversation"}), 500
+
+        # Enregistrer le message utilisateur
+        save_message(conversation_id, "user", user_message)
+
+        # Ajouter le message utilisateur au contexte
+        context.append({"role": "user", "content": user_message})
+
+        # Appeler OpenAI
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=enriched_context,
+            messages=context,
             temperature=0.5,
             max_tokens=500
         )
+
+        # Récupérer et enregistrer la réponse
         assistant_message = response["choices"][0]["message"]["content"]
+        context.append({"role": "assistant", "content": assistant_message})
+        save_message(conversation_id, "assistant", assistant_message)
 
-        # Enregistrer la réponse de l'assistant dans Airtable
-        airtable_messages.create({
-            "ConversationID": [record["id"]],
-            "Role": "assistant",
-            "Content": assistant_message,
-            "Timestamp": datetime.now().isoformat()
+        return jsonify({
+            "response": assistant_message,
+            "conversation_id": conversation_id
         })
-
-        return jsonify({"response": assistant_message, "conversation_id": conversation_id}), 200
     except Exception as e:
-        logger.error(f"Erreur dans le mode automatique : {e}")
-        return jsonify({"error": "Erreur lors de la génération de la réponse"}), 500
+        logger.error(f"Erreur dans l'endpoint '/chat': {e}")
+        return jsonify({"error": str(e)}), 500
 
-# Route pour les commandes Slack
-@app.route("/slack-command", methods=["POST"])
-def slack_command():
-    data = request.form
-    command_text = data.get("text", "").strip()
-    conversation_id = data.get("conversation_id")
-
-    if not conversation_id:
-        return jsonify({"text": "Erreur : Aucun ID de conversation fourni."}), 400
-
-    if command_text.lower() == "le minotaure est là":
-        if update_mode(conversation_id, "manuel"):
-            return jsonify({"text": f"La conversation {conversation_id} est maintenant en mode manuel."}), 200
-        else:
-            return jsonify({"text": "Erreur lors de la mise à jour du mode."}), 500
-
-    elif command_text.lower() == "le minotaure part":
-        if update_mode(conversation_id, "automatique"):
-            return jsonify({"text": f"La conversation {conversation_id} est maintenant en mode automatique."}), 200
-        else:
-            return jsonify({"text": "Erreur lors de la mise à jour du mode."}), 500
-
-    else:
-        return jsonify({"text": "Commande non reconnue. Essayez 'le Minotaure est là' ou 'le Minotaure part'."}), 400
-
-# Fonction pour mettre à jour le mode dans Airtable
-def update_mode(conversation_id, mode):
-    try:
-        airtable_conversations.update_by_field("ConversationID", conversation_id, {"Mode": mode})
-        logger.info(f"Mode mis à jour pour la conversation {conversation_id} : {mode}")
-        return True
-    except Exception as e:
-        logger.error(f"Erreur lors de la mise à jour du mode : {e}")
-        return False
+# Endpoint de vérification de santé
+@app.route("/", methods=["GET"])
+def health_check():
+    return "OK", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
