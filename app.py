@@ -34,15 +34,20 @@ TABLE_NAME_MESSAGES = "Messages"
 airtable_conversations = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONVERSATIONS)
 airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
 
-# Fonction pour mettre à jour le mode dans Airtable
-def update_mode(conversation_id, mode):
+# Fonction pour créer une nouvelle conversation
+def create_new_conversation():
     try:
-        airtable_conversations.update_by_field("ConversationID", conversation_id, {"Mode": mode})
-        logger.info(f"Mode mis à jour pour la conversation {conversation_id} : {mode}")
-        return True
+        conversation_id = str(uuid.uuid4())
+        record = airtable_conversations.create({
+            "ConversationID": conversation_id,
+            "Mode": "automatique",
+            "Timestamp": datetime.now().isoformat()
+        })
+        logger.info(f"Nouvelle conversation créée avec l'ID : {conversation_id}")
+        return conversation_id
     except Exception as e:
-        logger.error(f"Erreur lors de la mise à jour du mode : {e}")
-        return False
+        logger.error(f"Erreur lors de la création d'une nouvelle conversation : {e}")
+        return None
 
 # Fonction pour envoyer un message à Slack
 def send_message_to_slack(channel, text):
@@ -61,54 +66,55 @@ def send_message_to_slack(channel, text):
         logger.error(f"Erreur lors de l'envoi à Slack : {e}")
         return False
 
-# Route pour gérer les commandes Slack
-@app.route("/slack-command", methods=["POST"])
-def slack_command():
-    data = request.form
-    command_text = data.get("text", "").strip()
-    conversation_id = data.get("conversation_id")
-
-    if not conversation_id:
-        return jsonify({"text": "Erreur : Aucun ID de conversation fourni."}), 400
-
-    if command_text.lower() == "le minotaure est là":
-        if update_mode(conversation_id, "manuel"):
-            return jsonify({"text": f"La conversation {conversation_id} est maintenant en mode manuel."}), 200
-        else:
-            return jsonify({"text": "Erreur lors de la mise à jour du mode."}), 500
-
-    elif command_text.lower() == "le minotaure part":
-        if update_mode(conversation_id, "automatique"):
-            return jsonify({"text": f"La conversation {conversation_id} est maintenant en mode automatique."}), 200
-        else:
-            return jsonify({"text": "Erreur lors de la mise à jour du mode."}), 500
-
-    else:
-        return jsonify({"text": "Commande non reconnue. Essayez 'le Minotaure est là' ou 'le Minotaure part'."}), 400
-
 # Route principale du chatbot
 @app.route("/chat", methods=["POST"])
 def chat():
     user_message = request.json.get("message", "")
     conversation_id = request.json.get("conversation_id")
 
-    if not user_message or not conversation_id:
-        return jsonify({"error": "Message ou ID de conversation manquant"}), 400
+    if not user_message:
+        return jsonify({"error": "Message manquant"}), 400
+
+    # Si aucun conversation_id n'est fourni ou si la conversation est introuvable, créer une nouvelle conversation
+    if not conversation_id:
+        conversation_id = create_new_conversation()
+        if not conversation_id:
+            return jsonify({"error": "Erreur lors de la création d'une nouvelle conversation"}), 500
+    else:
+        try:
+            record = airtable_conversations.first(formula=f"{{ConversationID}} = '{conversation_id}'")
+            if not record:
+                conversation_id = create_new_conversation()
+                if not conversation_id:
+                    return jsonify({"error": "Erreur lors de la création d'une nouvelle conversation"}), 500
+        except Exception as e:
+            logger.error(f"Erreur lors de la vérification de la conversation : {e}")
+            return jsonify({"error": "Erreur lors de la vérification de la conversation"}), 500
 
     # Récupérer le mode de la conversation
     try:
         record = airtable_conversations.first(formula=f"{{ConversationID}} = '{conversation_id}'")
-        if not record:
-            return jsonify({"error": "Conversation introuvable"}), 404
         mode = record["fields"].get("Mode", "automatique")
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du mode : {e}")
         return jsonify({"error": "Erreur lors de la récupération du mode"}), 500
 
+    # Enregistrer le message de l'utilisateur dans Airtable
+    try:
+        airtable_messages.create({
+            "ConversationID": [record["id"]],
+            "Role": "user",
+            "Content": user_message,
+            "Timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement du message utilisateur : {e}")
+        return jsonify({"error": "Erreur lors de l'enregistrement du message utilisateur"}), 500
+
     # Si le mode est manuel, rediriger vers Slack
     if mode == "manuel":
         if send_message_to_slack("#conversationsite", f":bust_in_silhouette: Visiteur : {user_message} (ID: {conversation_id})"):
-            return jsonify({"message": "Message envoyé à Slack"}), 200
+            return jsonify({"message": "Message envoyé à Slack", "conversation_id": conversation_id}), 200
         else:
             return jsonify({"error": "Erreur lors de l'envoi à Slack"}), 500
 
@@ -122,15 +128,15 @@ def chat():
         )
         assistant_message = response["choices"][0]["message"]["content"]
 
-        # Enregistrer le message dans Airtable
+        # Enregistrer la réponse de l'assistant dans Airtable
         airtable_messages.create({
-            "ConversationID": [conversation_id],
+            "ConversationID": [record["id"]],
             "Role": "assistant",
             "Content": assistant_message,
             "Timestamp": datetime.now().isoformat()
         })
 
-        return jsonify({"response": assistant_message}), 200
+        return jsonify({"response": assistant_message, "conversation_id": conversation_id}), 200
     except Exception as e:
         logger.error(f"Erreur dans le mode automatique : {e}")
         return jsonify({"error": "Erreur lors de la génération de la réponse"}), 500
