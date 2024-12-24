@@ -61,36 +61,6 @@ def send_message_to_slack(channel, text):
         logger.error(f"Erreur lors de l'envoi à Slack : {e}")
         return False
 
-
-# Route pour recevoir les réponses Slack et les relayer au visiteur
-@app.route("/slack-response", methods=["POST"])
-def slack_response():
-    data = request.json
-    conversation_id = data.get("conversation_id")
-    message = data.get("text")
-
-    if not conversation_id or not message:
-        logger.error("ID de conversation ou message manquant dans la réponse Slack.")
-        return jsonify({"error": "ID de conversation ou message manquant"}), 400
-
-    # Enregistrer la réponse dans Airtable
-    try:
-        airtable_messages.create({
-            "ConversationID": [conversation_id],
-            "Role": "assistant",
-            "Content": message,
-            "Timestamp": datetime.now().isoformat()
-        })
-        logger.info(f"Réponse Slack enregistrée pour la conversation {conversation_id}")
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement de la réponse Slack : {e}")
-        return jsonify({"error": "Erreur lors de l'enregistrement du message"}), 500
-
-    # Relayer la réponse au client
-    # (Ajoutez ici votre logique de communication temps réel si nécessaire)
-    return jsonify({"message": "Réponse relayée avec succès"}), 200
-
-
 # Route pour gérer les commandes Slack
 @app.route("/slack-command", methods=["POST"])
 def slack_command():
