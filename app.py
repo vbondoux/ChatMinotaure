@@ -111,7 +111,6 @@ def create_conversation(user=None):
         # Envoyer un message Slack et récupérer le thread_ts
         thread_ts = send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
         if thread_ts:
-            # Convertir le thread_ts en chaîne et l'enregistrer
             airtable_conversations.update(record_id, {"SlackThreadTS": str(thread_ts)})
 
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
@@ -119,7 +118,6 @@ def create_conversation(user=None):
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None, None
-
 
 # Fonction pour enregistrer un message
 def save_message(conversation_record_id, role, content):
@@ -155,11 +153,11 @@ def chat_with_minotaure():
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
         else:
             # Récupérer le thread_ts de la conversation existante
-           records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
-        if records:
-            thread_ts = records[0]["fields"].get("SlackThreadTS")
-        else:
-            return jsonify({"error": "Conversation introuvable"}), 404
+            records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+            if records:
+                thread_ts = records[0]["fields"].get("SlackThreadTS")
+            else:
+                return jsonify({"error": "Conversation introuvable"}), 404
 
         # Enregistrer le message utilisateur
         save_message(conversation_id, "user", user_message)
