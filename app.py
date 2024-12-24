@@ -42,12 +42,12 @@ airtable_conversations = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONVERSATIO
 airtable_messages = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_MESSAGES)
 
 # Fonction pour envoyer un message sur Slack
-def send_slack_message(text, channel="#conversationsite"):
+def send_slack_message(text, channel="#conversationsite", thread_ts=None):
     try:
         slack_token = os.getenv("SLACK_BOT_TOKEN")
         if not slack_token:
             logger.error("Le token Slack (SLACK_BOT_TOKEN) n'est pas défini dans les variables d'environnement.")
-            return
+            return None
 
         url = "https://slack.com/api/chat.postMessage"
         headers = {
@@ -59,13 +59,19 @@ def send_slack_message(text, channel="#conversationsite"):
             "text": text
         }
 
+        if thread_ts:
+            data["thread_ts"] = thread_ts
+
         response = requests.post(url, headers=headers, json=data)
         if response.status_code == 200 and response.json().get("ok"):
-            logger.info(f"Message Slack envoyé au canal {channel}: {text}")
+            logger.info(f"Message Slack envoyé : {text}")
+            return response.json().get("ts")  # Retourner le timestamp du message
         else:
             logger.error(f"Erreur lors de l'envoi du message Slack : {response.text}")
+            return None
     except Exception as e:
         logger.error(f"Erreur lors de l'envoi du message Slack : {e}")
+        return None
 
 # Fonction pour charger le contexte initial depuis Airtable
 def load_context_from_airtable():
@@ -102,14 +108,16 @@ def create_conversation(user=None):
         record = airtable_conversations.create(data)
         record_id = record["id"]
 
-        # Envoyer un message Slack pour le démarrage de la conversation
-        send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
+        # Envoyer un message Slack et récupérer le thread_ts
+        thread_ts = send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
+        if thread_ts:
+            airtable_conversations.update(record_id, {"SlackThreadTS": thread_ts})
 
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
-        return record_id
+        return record_id, thread_ts
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
-        return None
+        return None, None
 
 # Fonction pour enregistrer un message
 def save_message(conversation_record_id, role, content):
@@ -124,11 +132,7 @@ def save_message(conversation_record_id, role, content):
         }
         airtable_messages.create(data)
 
-        # Envoyer le message à Slack
-        if role == "user":
-            send_slack_message(f":bust_in_silhouette: Visiteur : {content}")
-        elif role == "assistant":
-            send_slack_message(f":taurus: Minotaure : {content}")
+        logger.info(f"Message enregistré avec succès : {data}")
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
@@ -144,9 +148,16 @@ def chat_with_minotaure():
 
         # Si une conversation n'existe pas encore, la créer
         if not conversation_id:
-            conversation_id = create_conversation(user=user_id)
+            conversation_id, thread_ts = create_conversation(user=user_id)
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
+        else:
+            # Récupérer le thread_ts de la conversation existante
+            record = airtable_conversations.search("ConversationID", conversation_id)
+            if record:
+                thread_ts = record[0]["fields"].get("SlackThreadTS")
+            else:
+                return jsonify({"error": "Conversation introuvable"}), 404
 
         # Enregistrer le message utilisateur
         save_message(conversation_id, "user", user_message)
@@ -166,6 +177,10 @@ def chat_with_minotaure():
         assistant_message = response["choices"][0]["message"]["content"]
         context.append({"role": "assistant", "content": assistant_message})
         save_message(conversation_id, "assistant", assistant_message)
+
+        # Envoyer les messages au thread Slack
+        send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", thread_ts=thread_ts)
+        send_slack_message(f":taurus: Minotaure : {assistant_message}", thread_ts=thread_ts)
 
         return jsonify({
             "response": assistant_message,
