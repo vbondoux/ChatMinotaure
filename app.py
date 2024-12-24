@@ -81,8 +81,10 @@ def send_message_to_slack(channel, text):
         headers = {"Authorization": f"Bearer {SLACK_BOT_TOKEN}", "Content-Type": "application/json"}
         data = {"channel": channel, "text": text}
 
-        logger.debug(f"Envoi à Slack : {data}")
+        logger.debug(f"Tentative d'envoi à Slack : {data}")
         response = requests.post(url, headers=headers, json=data)
+        logger.debug(f"Réponse Slack : {response.status_code}, {response.text}")
+
         if response.status_code == 200 and response.json().get("ok"):
             logger.info(f"Message envoyé à Slack : {text}")
             return True
@@ -92,6 +94,7 @@ def send_message_to_slack(channel, text):
     except Exception as e:
         logger.error(f"Erreur lors de l'envoi à Slack : {e}")
         return False
+
 
 # Route principale du chatbot
 @app.route("/chat", methods=["POST"])
