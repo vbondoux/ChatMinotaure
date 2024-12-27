@@ -42,7 +42,7 @@ base = api.base(BASE_ID)
 airtable_context = base.table(TABLE_NAME_CONTEXT)
 airtable_conversations = base.table(TABLE_NAME_CONVERSATIONS)
 airtable_messages = base.table(TABLE_NAME_MESSAGES)
-
+airtable = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME_CONTEXT)
 def initialize_context():
   
     try:
@@ -90,6 +90,33 @@ def initialize_context():
 # Initialisation du contexte
 initialize_context()
 
+
+ Fonction pour charger le contexte initial depuis Airtable
+def load_context_from_airtable():
+    try:
+        # Récupérer le premier enregistrement
+        records = airtable.all(max_records=1, sort=["Timestamp"])
+        if not records:
+            logger.error("Aucun contexte trouvé dans Airtable.")
+            return []
+
+        # Construire le contexte à partir du premier enregistrement
+        first_record = records[0]["fields"]
+        context = [{"role": first_record["Role"], "content": first_record["Content"]}]
+        logger.info("Contexte initial chargé avec succès depuis Airtable.")
+        return context
+    except Exception as e:
+        logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
+        return []
+
+# Charger le contexte initial depuis Airtable
+context = load_context_from_airtable()
+
+if not context:
+      logger.warning("Contexte initial manquant. Utilisation d'un contexte par défaut.")
+    context = [{"role": "system", "content": "Bienvenue dans le contexte par défaut du Minotaure."}]
+
+
 # Fonction pour envoyer un message sur Slack
 def send_slack_message(text, channel="#conversationsite", thread_ts=None):
     try:
@@ -122,47 +149,6 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None):
         logger.error(f"Erreur lors de l'envoi du message Slack : {e}")
         return None
 
-# Fonction pour charger le contexte initial depuis Airtable
-def load_context_from_airtable():
-    try:
-        records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
-        logger.debug(f"Enregistrements bruts récupérés depuis Airtable : {records}")
-        
-        if not records or len(records) == 0:
-            logger.error("Aucun contexte trouvé dans Airtable.")
-            return []
-
-        first_record = records[0]
-        if "fields" not in first_record:
-            logger.error(f"Clé 'fields' absente dans l'enregistrement : {first_record}")
-            return []
-
-        fields = first_record["fields"]
-        logger.debug(f"Champs récupérés : {fields}")
-
-        role = fields.get("Role")
-        content = fields.get("Content")
-
-        if not role or not isinstance(role, str):
-            logger.error(f"Champ 'Role' manquant ou invalide : {role}")
-            return []
-        if not content or not isinstance(content, str):
-            logger.error(f"Champ 'Content' manquant ou invalide : {content}")
-            return []
-
-        context = [{"role": role, "content": content}]
-        logger.info(f"Contexte initial chargé avec succès : {context}")
-        return context
-    except Exception as e:
-        logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
-        return []
-
-# Charger le contexte initial
-context = load_context_from_airtable()
-
-if not context:
-    logger.warning("Contexte initial manquant. Utilisation d'un contexte par défaut.")
-    context = [{"role": "system", "content": "Bienvenue dans le contexte par défaut du Minotaure."}]
 
 # Fonction pour créer une nouvelle conversation
 def create_conversation(user=None):
