@@ -79,12 +79,24 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None):
 def load_context_from_airtable():
     try:
         records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
-        if not records:
+        logger.debug(f"Enregistrements récupérés depuis Airtable : {records}")
+
+        if not records or len(records) == 0:
             logger.error("Aucun contexte trouvé dans Airtable.")
             return []
 
         first_record = records[0].get("fields", {})
-        context = [{"role": first_record["Role"], "content": first_record["Content"]}]
+        role = first_record.get("Role")
+        content = first_record.get("Content")
+
+        if not role or not isinstance(role, str):
+            logger.error(f"Champ 'Role' manquant ou invalide : {role}")
+            return []
+        if not content or not isinstance(content, str):
+            logger.error(f"Champ 'Content' manquant ou invalide : {content}")
+            return []
+
+        context = [{"role": role, "content": content}]
         logger.info("Contexte initial chargé avec succès depuis Airtable.")
         return context
     except Exception as e:
@@ -95,8 +107,8 @@ def load_context_from_airtable():
 context = load_context_from_airtable()
 
 if not context:
-    logger.error("Impossible de démarrer l'application sans contexte initial.")
-    raise ValueError("Contexte initial manquant.")
+    logger.warning("Contexte initial manquant. Utilisation d'un contexte par défaut.")
+    context = [{"role": "system", "content": "Bienvenue dans le contexte par défaut du Minotaure."}]
 
 # Fonction pour créer une nouvelle conversation
 def create_conversation(user=None):
@@ -179,27 +191,6 @@ def chat_with_minotaure():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
-
-# Endpoint pour tester la longueur maximale
-@app.route("/test-context-length", methods=["GET"])
-def test_context_length():
-    try:
-        # Générer un contenu de test
-        max_length = 100000
-        content = "a" * max_length  # Contenu rempli de 'a' pour tester la limite
-        test_data = {
-            "Role": "system",
-            "Content": content
-        }
-        logger.debug(f"Test de création avec une longueur de {len(content)} caractères.")
-
-        # Tenter de créer un enregistrement dans Airtable
-        record = airtable_context.create(test_data)
-        logger.info("Enregistrement réussi dans Airtable pour le test.")
-        return jsonify({"message": "Test réussi.", "max_length": len(content)}), 200
-    except Exception as e:
-        logger.error(f"Erreur lors du test de la longueur maximale : {e}")
-        return jsonify({"message": "Test échoué.", "error": str(e)}), 500
 
 @app.route("/", methods=["GET"])
 def health_check():
