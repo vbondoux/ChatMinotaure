@@ -125,14 +125,20 @@ def load_context_from_airtable():
     try:
         records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
         logger.debug(f"Enregistrements récupérés depuis Airtable : {records}")
-
+        
         if not records or len(records) == 0:
             logger.error("Aucun contexte trouvé dans Airtable.")
             return []
 
-        first_record = records[0].get("fields", {})
-        role = first_record.get("Role")
-        content = first_record.get("Content")
+        # Vérification robuste des données récupérées
+        first_record = records[0]
+        if not first_record or "fields" not in first_record:
+            logger.error("Structure de l'enregistrement Airtable inattendue ou champs manquants.")
+            return []
+
+        fields = first_record["fields"]
+        role = fields.get("Role")
+        content = fields.get("Content")
 
         if not role or not isinstance(role, str):
             logger.error(f"Champ 'Role' manquant ou invalide : {role}")
@@ -147,6 +153,7 @@ def load_context_from_airtable():
     except Exception as e:
         logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
         return []
+
 
 # Charger le contexte initial
 context = load_context_from_airtable()
