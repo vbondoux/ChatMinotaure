@@ -3,10 +3,8 @@ from flask_cors import CORS
 import openai
 import os
 import logging
-from pyairtable import Api
+from pyairtable import Table
 from datetime import datetime
-import uuid
-import requests
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -29,157 +27,53 @@ openai.api_key = OPENAI_API_KEY
 # Configuration Airtable
 AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
 BASE_ID = os.getenv("AIRTABLE_BASE_ID")
-TABLE_NAME_CONTEXT = "Context"
-TABLE_NAME_CONVERSATIONS = "Conversations"
-TABLE_NAME_MESSAGES = "Messages"
+TABLE_NAME = "Context"  # Nom de votre table Airtable
 
 if not AIRTABLE_API_KEY or not BASE_ID:
     logger.error("Les informations d'Airtable (API_KEY ou BASE_ID) ne sont pas définies.")
     raise ValueError("Les informations d'Airtable ne sont pas définies.")
 
-api = Api(AIRTABLE_API_KEY)
-base = api.base(BASE_ID)
-airtable_context = base.table(TABLE_NAME_CONTEXT)
-airtable_conversations = base.table(TABLE_NAME_CONVERSATIONS)
-airtable_messages = base.table(TABLE_NAME_MESSAGES)
+airtable = Table(AIRTABLE_API_KEY, BASE_ID, TABLE_NAME)
 
-# Fonction pour envoyer un message sur Slack
-def send_slack_message(text, channel="#conversationsite", thread_ts=None):
-    try:
-        slack_token = os.getenv("SLACK_BOT_TOKEN")
-        if not slack_token:
-            logger.error("Le token Slack (SLACK_BOT_TOKEN) n'est pas défini dans les variables d'environnement.")
-            return None
-
-        url = "https://slack.com/api/chat.postMessage"
-        headers = {
-            "Authorization": f"Bearer {slack_token}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "channel": channel,
-            "text": text
-        }
-
-        if thread_ts:
-            data["thread_ts"] = thread_ts
-
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200 and response.json().get("ok"):
-            logger.info(f"Message Slack envoyé : {text}")
-            return response.json().get("ts")
-        else:
-            logger.error(f"Erreur lors de l'envoi du message Slack : {response.text}")
-            return None
-    except Exception as e:
-        logger.error(f"Erreur lors de l'envoi du message Slack : {e}")
-        return None
-
-# Fonction pour charger le contexte initial depuis Airtable
 # Fonction pour charger le contexte initial depuis Airtable
 def load_context_from_airtable():
     try:
-        # Récupérer le premier enregistrement trié par le champ "Timestamp"
-        records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
-        logger.debug(f"Enregistrements récupérés depuis Airtable : {records}")
-
-        # Vérifier si des enregistrements sont disponibles
-        if not records or len(records) == 0:
+        # Récupérer le premier enregistrement
+        records = airtable.all(max_records=1, sort=["Timestamp"])
+        if not records:
             logger.error("Aucun contexte trouvé dans Airtable.")
             return []
 
-        # Extraire les champs de l'enregistrement
-        first_record = records[0].get("fields", {})
-        role = first_record.get("Role")
-        content = first_record.get("Content")
-
-        # Vérifications sur les champs Role et Content
-        if not role or not isinstance(role, str):
-            logger.error(f"Champ 'Role' manquant ou invalide : {role}")
-            return []
-        if not content or not isinstance(content, str):
-            logger.error(f"Champ 'Content' manquant ou invalide : {content}")
-            return []
-
-        # Construire le contexte
-        context = [{"role": role, "content": content}]
+        # Construire le contexte à partir du premier enregistrement
+        first_record = records[0]["fields"]
+        context = [{"role": first_record["Role"], "content": first_record["Content"]}]
         logger.info("Contexte initial chargé avec succès depuis Airtable.")
         return context
-
     except Exception as e:
         logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
         return []
 
-# Charger le contexte initial
+# Charger le contexte initial depuis Airtable
 context = load_context_from_airtable()
 
 if not context:
-    logger.warning("Contexte initial manquant. Utilisation d'un contexte par défaut.")
-    context = [{"role": "system", "content": "Bienvenue dans le contexte par défaut du Minotaure."}]
+    logger.error("Impossible de démarrer l'application sans contexte initial.")
+    raise ValueError("Contexte initial manquant.")
 
-# Fonction pour créer une nouvelle conversation
-def create_conversation(user=None):
-    try:
-        conversation_id = str(uuid.uuid4())
-        data = {
-            "ConversationID": conversation_id,
-            "User": user or "anonymous",
-            "StartTimestamp": datetime.now().isoformat()
-        }
-        record = airtable_conversations.create(data)
-        record_id = record["id"]
-
-        thread_ts = send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
-        if thread_ts:
-            airtable_conversations.update(record_id, {"SlackThreadTS": thread_ts})
-
-        logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
-        return record_id, thread_ts
-    except Exception as e:
-        logger.error(f"Erreur lors de la création de la conversation : {e}")
-        return None, None
-
-# Fonction pour enregistrer un message
-def save_message(conversation_record_id, role, content):
-    try:
-        message_id = str(uuid.uuid4())
-        data = {
-            "MessageID": message_id,
-            "ConversationID": [conversation_record_id],
-            "Role": role,
-            "Content": content,
-            "Timestamp": datetime.now().isoformat()
-        }
-        airtable_messages.create(data)
-
-        logger.info(f"Message enregistré avec succès : {data}")
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement du message : {e}")
-
+# Endpoint pour interagir avec le Minotaure
 @app.route("/chat", methods=["POST"])
 def chat_with_minotaure():
+    logger.info("POST reçu à l'endpoint '/chat'")
     try:
         user_message = request.json.get("message", "")
-        user_id = request.json.get("user", "anonymous")
-        conversation_id = request.json.get("conversation_id")
-
         if not user_message:
+            logger.warning("Message non fourni dans la requête POST")
             return jsonify({"error": "Message non fourni"}), 400
 
-        if not conversation_id:
-            conversation_id, thread_ts = create_conversation(user=user_id)
-            if not conversation_id:
-                return jsonify({"error": "Impossible de créer une conversation"}), 500
-        else:
-            records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
-            if records:
-                thread_ts = records[0]["fields"].get("SlackThreadTS")
-            else:
-                return jsonify({"error": "Conversation introuvable"}), 404
-
-        save_message(conversation_id, "user", user_message)
+        # Ajouter le message utilisateur au contexte
         context.append({"role": "user", "content": user_message})
 
+        # Appeler l'API OpenAI avec le contexte enrichi
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=context,
@@ -187,21 +81,29 @@ def chat_with_minotaure():
             max_tokens=500
         )
 
+        # Récupérer la réponse et l'ajouter au contexte
         assistant_message = response["choices"][0]["message"]["content"]
         context.append({"role": "assistant", "content": assistant_message})
-        save_message(conversation_id, "assistant", assistant_message)
 
-        send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", thread_ts=thread_ts)
-        send_slack_message(f":taurus: Minotaure : {assistant_message}", thread_ts=thread_ts)
+        logger.info("Réponse OpenAI générée avec succès")
+        return jsonify({"response": assistant_message})
 
-        return jsonify({"response": assistant_message, "conversation_id": conversation_id})
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
 
+# Endpoint pour les requêtes GET (vérification de santé)
 @app.route("/", methods=["GET"])
 def health_check():
+    logger.info("GET reçu à l'endpoint '/'")
     return "OK", 200
 
+# Démarrer le serveur
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    try:
+        port = int(os.getenv("PORT", 5000))
+        logger.info(f"Démarrage de l'application sur le port {port}")
+        app.run(host="0.0.0.0", port=port)
+    except Exception as e:
+        logger.error(f"Erreur lors du démarrage de l'application : {e}")
+        raise
