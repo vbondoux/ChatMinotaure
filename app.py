@@ -124,19 +124,20 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None):
 def load_context_from_airtable():
     try:
         records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
-        logger.debug(f"Enregistrements récupérés depuis Airtable : {records}")
+        logger.debug(f"Enregistrements bruts récupérés depuis Airtable : {records}")
         
         if not records or len(records) == 0:
             logger.error("Aucun contexte trouvé dans Airtable.")
             return []
 
-        # Vérification robuste des données récupérées
         first_record = records[0]
-        if not first_record or "fields" not in first_record:
-            logger.error("Structure de l'enregistrement Airtable inattendue ou champs manquants.")
+        if "fields" not in first_record:
+            logger.error(f"Clé 'fields' absente dans l'enregistrement : {first_record}")
             return []
 
         fields = first_record["fields"]
+        logger.debug(f"Champs récupérés : {fields}")
+
         role = fields.get("Role")
         content = fields.get("Content")
 
@@ -148,12 +149,11 @@ def load_context_from_airtable():
             return []
 
         context = [{"role": role, "content": content}]
-        logger.info("Contexte initial chargé avec succès depuis Airtable.")
+        logger.info(f"Contexte initial chargé avec succès : {context}")
         return context
     except Exception as e:
         logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
         return []
-
 
 # Charger le contexte initial
 context = load_context_from_airtable()
