@@ -5,3 +5,4 @@ werkzeug
 flask-cors
 pyairtable
 requests
+slack-sdk
