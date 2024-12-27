@@ -43,9 +43,33 @@ airtable_context = base.table(TABLE_NAME_CONTEXT)
 airtable_conversations = base.table(TABLE_NAME_CONVERSATIONS)
 airtable_messages = base.table(TABLE_NAME_MESSAGES)
 
+def create_table_context():
+    """Vérifie si la table Context existe, sinon la crée."""
+    try:
+        # Vérifier si la table existe
+        tables = api.get(BASE_ID).get('tables', [])
+        table_names = [table['name'] for table in tables]
+        if TABLE_NAME_CONTEXT not in table_names:
+            logger.info("La table Context n'existe pas. Création de la table.")
+            # Créer la table
+            api.create_table(BASE_ID, TABLE_NAME_CONTEXT, [
+                {"name": "Role", "type": "singleLineText"},
+                {"name": "Content", "type": "multilineText"},
+                {"name": "Timestamp", "type": "dateTime"}
+            ])
+            logger.info("Table Context créée avec succès.")
+        else:
+            logger.info("La table Context existe déjà.")
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification ou de la création de la table Context : {e}")
+
 def initialize_context():
     """Vérifie si la table Context est vide et crée un enregistrement initial si nécessaire."""
     try:
+        # Créer la table si elle n'existe pas
+        create_table_context()
+
+        # Vérifier si la table contient des enregistrements
         records = airtable_context.all()
         if not records or len(records) == 0:
             logger.info("Table Context vide. Création d'un enregistrement initial.")
@@ -78,7 +102,7 @@ def initialize_context():
                 "Tu dois répondre toujours en restant fidèle à ce personnage. Ton objectif est de déstabiliser subtilement l'interlocuteur tout en explorant ses motivations BDSM.\n"
                 "Tu es un maître qui répond de manière directe. Ton ton est affirmatif, précis, et pas poétique. Tu utilises des mots crus et vulgaires."
             )
-            airtable_context.create({"Role": "system", "Content": initial_content})
+            airtable_context.create({"Role": "system", "Content": initial_content, "Timestamp": datetime.now().isoformat()})
             logger.info("Enregistrement initial créé avec succès.")
         else:
             logger.info("La table Context contient déjà des enregistrements.")
