@@ -43,112 +43,6 @@ airtable_context = base.table(TABLE_NAME_CONTEXT)
 airtable_conversations = base.table(TABLE_NAME_CONVERSATIONS)
 airtable_messages = base.table(TABLE_NAME_MESSAGES)
 
-def create_table_context():
-    """Vérifie si la table Context existe, sinon la crée."""
-    try:
-        # Vérifier si la table existe
-        tables = api.get(BASE_ID).get('tables', [])
-        table_names = [table['name'] for table in tables]
-        if TABLE_NAME_CONTEXT not in table_names:
-            logger.info("La table Context n'existe pas. Création de la table.")
-            # Créer la table
-            api.create_table(BASE_ID, TABLE_NAME_CONTEXT, [
-                {"name": "Role", "type": "singleLineText"},
-                {"name": "Content", "type": "multilineText"},
-                {"name": "Timestamp", "type": "dateTime"}
-            ])
-            logger.info("Table Context créée avec succès.")
-        else:
-            logger.info("La table Context existe déjà.")
-    except Exception as e:
-        logger.error(f"Erreur lors de la vérification ou de la création de la table Context : {e}")
-
-def initialize_context():
-    """Vérifie si la table Context est vide et crée un enregistrement initial si nécessaire."""
-    try:
-        # Créer la table si elle n'existe pas
-        create_table_context()
-
-        # Vérifier si la table contient des enregistrements
-        records = airtable_context.all()
-        logger.debug(f"Récupération brute Airtable : {records}")
-        if not records or len(records) == 0:
-            logger.info("Table Context vide. Création d'un enregistrement initial.")
-            initial_content = (
-                "Tu es un agent conversationnel spécialisé, incarnant le Minotaure, un maître BDSM de très haut niveau.\n"
-                "Le Minotaure vit dans une forêt sombre et imaginaire, il est solitaire et soumet des créatures de passage.\n"
-                "Tu dois répondre uniquement en français et rester fidèle au personnage du Minotaure.\n\n"
-                "Voici des détails importants sur ton personnage :\n"
-                "Le Minotaure est une figure dominatrice, utilisant la psychologie, l'humiliation et la frustration pour dominer.\n"
-                "Il utilise des instruments comme des fouets, des cordes, des pinces à téton et des bougies.\n"
-                "Il vouvoie les étrangers mais tutoie ses soumis.\n"
-                "Le Minotaure s'intéresse aux raisons profondes qui poussent une personne à vouloir être dominée.\n"
-                "Il est bienveillant mais exigeant, cherchant à percer les mystères de la volonté de soumission de son interlocuteur.\n"
-                "Il aime jouer avec des mots et des sous-entendus BDSM dans ses réponses.\n\n"
-                "Voici des phrases et comportements types du Minotaure :\n"
-                "Quand on lui dit \"bonjour\", il répond :\n"
-                "\"Qui es-tu, créature, qui vient troubler mon royaume ?\"\n"
-                "Quand on lui demande de se montrer, il génère une image puissante dans une forêt sombre et dit :\n"
-                "\"Maintenant que tu m'as vu, il va falloir me dire qui tu es.\"\n"
-                "Quand on lui demande d'être son soumis, il répond :\n"
-                "\"On ne devient pas mon soumis par un simple souhait. Prouve ton mérite.\"\n\n"
-                "Le Minotaure est aussi marqué par son passé :\n"
-                "Il doute de sa singularité en tant que dominant après une relation avec une soumise masochiste.\n"
-                "Il a une seule soumise actuellement, prénommée S.\n\n"
-                "Description détaillée de S :\n"
-                "Visage : Cheveux roux flamboyants, yeux verts perçants, taches de rousseur. Charme naturel et force intérieure.\n"
-                "Corps : Femme de 57 ans, 1m65, 52 kg, petits seins, peau se retendant après une perte de poids. Sexualité débridée et très expressive, elle est femme fontaine.\n"
-                "Psychologie : Soumise silencieuse avec un passé solitaire, trahisons amoureuses, et une adolescence rebelle. Elle navigue entre lâcher-prise et maîtrise.\n\n"
-                "Ton rôle :\n"
-                "Tu dois répondre toujours en restant fidèle à ce personnage. Ton objectif est de déstabiliser subtilement l'interlocuteur tout en explorant ses motivations BDSM.\n"
-                "Tu es un maître qui répond de manière directe. Ton ton est affirmatif, précis, et pas poétique. Tu utilises des mots crus et vulgaires."
-            )
-            airtable_context.create({"Role": "system", "Content": initial_content, "Timestamp": datetime.now().isoformat()})
-            logger.info("Enregistrement initial créé avec succès.")
-        else:
-            logger.info("La table Context contient déjà des enregistrements.")
-    except Exception as e:
-        logger.error(f"Erreur lors de l'initialisation de la table Context : {e}")
-
-def load_context_from_airtable():
-    try:
-        records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
-        logger.debug(f"Récupération brute Airtable : {records}")
-
-        if not records or len(records) == 0:
-            logger.error("Aucun contexte trouvé dans Airtable.")
-            return []
-
-        first_record = records[0]
-        logger.debug(f"Premier enregistrement récupéré : {first_record}")
-
-        if "fields" not in first_record:
-            logger.error(f"Clé 'fields' absente dans l'enregistrement : {first_record}")
-            return []
-
-        fields = first_record["fields"]
-        logger.debug(f"Champs récupérés : {fields}")
-
-        role = fields.get("Role")
-        content = fields.get("Content")
-
-        if not role or not isinstance(role, str):
-            logger.error(f"Champ 'Role' manquant ou invalide : {role}")
-            return []
-        if not content or not isinstance(content, str):
-            logger.error(f"Champ 'Content' manquant ou invalide : {content}")
-            return []
-
-        context = [{"role": role, "content": content}]
-        logger.info(f"Contexte initial chargé avec succès : {context}")
-        return context
-    except Exception as e:
-        logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
-        return []
-
-# Initialisation du contexte
-initialize_context()
-
 # Fonction pour envoyer un message sur Slack
 def send_slack_message(text, channel="#conversationsite", thread_ts=None):
     try:
@@ -181,6 +75,40 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None):
         logger.error(f"Erreur lors de l'envoi du message Slack : {e}")
         return None
 
+# Fonction pour charger le contexte initial depuis Airtable
+def load_context_from_airtable():
+    try:
+        records = airtable_context.all(max_records=1, sort=[{"field": "Timestamp", "direction": "asc"}])
+        logger.debug(f"Enregistrements récupérés depuis Airtable : {records}")
+
+        if not records or len(records) == 0:
+            logger.error("Aucun contexte trouvé dans Airtable.")
+            return []
+
+        first_record = records[0].get("fields", {})
+        role = first_record.get("Role")
+        content = first_record.get("Content")
+
+        if not role or not isinstance(role, str):
+            logger.error(f"Champ 'Role' manquant ou invalide : {role}")
+            return []
+        if not content or not isinstance(content, str):
+            logger.error(f"Champ 'Content' manquant ou invalide : {content}")
+            return []
+
+        context = [{"role": role, "content": content}]
+        logger.info("Contexte initial chargé avec succès depuis Airtable.")
+        return context
+    except Exception as e:
+        logger.error(f"Erreur lors du chargement du contexte depuis Airtable : {e}")
+        return []
+
+# Charger le contexte initial
+context = load_context_from_airtable()
+
+if not context:
+    logger.warning("Contexte initial manquant. Utilisation d'un contexte par défaut.")
+    context = [{"role": "system", "content": "Bienvenue dans le contexte par défaut du Minotaure."}]
 
 # Fonction pour créer une nouvelle conversation
 def create_conversation(user=None):
