@@ -151,12 +151,18 @@ def chat_with_minotaure():
             conversation_id, thread_ts = create_conversation(user=user_id)
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
+            context = load_context_from_airtable()
         else:
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if records:
                 thread_ts = records[0]["fields"].get("SlackThreadTS")
+                context = [{"role": "system", "content": load_context_from_airtable()}]  # Recharge le contexte initial
+                messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
+                for msg in messages:
+                    context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
             else:
-                return jsonify({"error": "Conversation introuvable"}), 404
+               logger.warning(f"Aucune conversation trouvée avec ConversationID: {conversation_id}")
+               return jsonify({"error": "Conversation introuvable"}), 404
 
         save_message(conversation_id, "user", user_message)
         context.append({"role": "user", "content": user_message})
