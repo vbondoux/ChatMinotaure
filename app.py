@@ -198,7 +198,7 @@ def chat_with_minotaure():
         # Vérifiez si le mode est manuel
         if mode == "manuel":
             send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
-           
+            return jsonify({"response": None, "conversation_id": conversation_id})  # Rien n'est renvoyé au client
 
         # Appeler OpenAI pour une réponse automatique uniquement en mode automatique
         response = openai.ChatCompletion.create(
