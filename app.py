@@ -21,17 +21,16 @@ CORS(app)
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Charger les clés API d'OpenAI et d'Airtable
+# Charger les clés API et secrets
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
 BASE_ID = os.getenv("AIRTABLE_BASE_ID")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 SLACK_MANUAL_BOT_TOKEN = os.getenv("SLACK_MANUAL_BOT_TOKEN")
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 SLACK_MANUAL_SIGNING_SECRET = os.getenv("SLACK_MANUAL_SIGNING_SECRET")
 
-# Vérification des variables d'environnement
-if not all([OPENAI_API_KEY, AIRTABLE_API_KEY, BASE_ID, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET]):
+if not all([OPENAI_API_KEY, AIRTABLE_API_KEY, BASE_ID, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_MANUAL_BOT_TOKEN, SLACK_MANUAL_SIGNING_SECRET]):
     logger.error("Les clés API ou les variables d'environnement sont manquantes.")
     raise ValueError("Configuration incomplète.")
 
@@ -43,7 +42,7 @@ airtable_conversations = base.table("Conversations")
 airtable_messages = base.table("Messages")
 
 # Fonction pour vérifier les requêtes Slack
-def verify_slack_request(request, signing_secret):
+def verify_slack_request(request):
     timestamp = request.headers.get("X-Slack-Request-Timestamp")
     if abs(time.time() - int(timestamp)) > 60 * 5:
         return False
@@ -53,13 +52,15 @@ def verify_slack_request(request, signing_secret):
     sig_basestring = f"v0:{timestamp}:{request_body}"
 
     my_signature = "v0=" + hmac.new(
-        signing_secret.encode(), sig_basestring.encode(), hashlib.sha256
+        SLACK_MANUAL_SIGNING_SECRET.encode(),
+        sig_basestring.encode(),
+        hashlib.sha256
     ).hexdigest()
 
     return hmac.compare_digest(my_signature, slack_signature)
 
 # Fonction pour envoyer un message sur Slack
-def send_slack_message(text, channel="#conversationsite", thread_ts=None, manual=False):
+def send_slack_message(text, channel, thread_ts=None, manual=False):
     try:
         slack_token = SLACK_MANUAL_BOT_TOKEN if manual else SLACK_BOT_TOKEN
         if not slack_token:
@@ -70,8 +71,10 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None, manual
             "Authorization": f"Bearer {slack_token}",
             "Content-Type": "application/json"
         }
-        data = {"channel": channel, "text": text}
-
+        data = {
+            "channel": channel,
+            "text": text
+        }
         if thread_ts:
             data["thread_ts"] = thread_ts
 
@@ -86,7 +89,7 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None, manual
         logger.error(f"Erreur lors de l'envoi du message Slack : {e}")
         return None
 
-# Fonction pour charger le contexte initial depuis Airtable
+# Charger le contexte initial depuis Airtable
 def load_context_from_airtable():
     try:
         records = airtable_context.all(max_records=1, sort=["Timestamp"])
@@ -107,8 +110,7 @@ def create_conversation(user=None):
         data = {
             "ConversationID": conversation_id,
             "User": user or "anonymous",
-            "StartTimestamp": datetime.now().isoformat(),
-            "Mode": "Automatique"
+            "StartTimestamp": datetime.now().isoformat()
         }
         record = airtable_conversations.create(data)
         record_id = record["id"]
@@ -142,10 +144,6 @@ def chat_with_minotaure():
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if records:
                 thread_ts = records[0]["fields"].get("SlackThreadTS")
-                mode = records[0]["fields"].get("Mode", "Automatique")
-                if mode == "Manuel":
-                    return jsonify({"error": "Mode manuel actif, aucune réponse automatique"}), 200
-
                 context = load_context_from_airtable()
                 messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
                 for msg in messages:
@@ -167,8 +165,8 @@ def chat_with_minotaure():
         context.append({"role": "assistant", "content": assistant_message})
         save_message(conversation_id, "assistant", assistant_message)
 
-        send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", thread_ts=thread_ts)
-        send_slack_message(f":taurus: Minotaure : {assistant_message}", thread_ts=thread_ts)
+        send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
+        send_slack_message(f":taurus: Minotaure : {assistant_message}", channel="#conversationsite", thread_ts=thread_ts)
 
         return jsonify({"response": assistant_message, "conversation_id": conversation_id})
     except Exception as e:
@@ -177,13 +175,16 @@ def chat_with_minotaure():
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
-    if not verify_slack_request(request, SLACK_MANUAL_SIGNING_SECRET):
+    if not verify_slack_request(request):
+        logger.error("Requête Slack non valide.")
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
         data = request.json
+
         if "event" in data:
             event = data["event"]
+
             if event.get("type") == "message" and not event.get("bot_id"):
                 user_message = event.get("text")
                 channel_id = event.get("channel")
@@ -193,11 +194,36 @@ def slack_events():
                 if records:
                     mode = records[0]["fields"].get("Mode", "Automatique")
                     if mode == "Manuel":
+                        # Répondre manuellement
                         send_slack_message(f":taurus: {user_message}", channel=channel_id, thread_ts=thread_ts, manual=True)
-
+                        logger.info(f"Message manuel envoyé pour thread_ts {thread_ts}.")
+                    else:
+                        logger.info("Mode automatique actif, aucune réponse manuelle.")
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/chat_closed", methods=["POST"])
+def chat_closed():
+    try:
+        data = request.json
+        conversation_id = data.get("conversation_id")
+        message = data.get("message", "Chatbot fermé par l'utilisateur")
+
+        records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+        if not records:
+            return jsonify({"error": "Conversation introuvable"}), 404
+
+        thread_ts = records[0]["fields"].get("SlackThreadTS")
+        if not thread_ts:
+            return jsonify({"error": "Thread TS introuvable"}), 404
+
+        send_slack_message(f":door: Notification : {message}", channel="#conversationsite", thread_ts=thread_ts)
+
+        return jsonify({"status": "success", "message": "Notification envoyée"}), 200
+    except Exception as e:
+        logger.error(f"Erreur lors de la notification de fermeture : {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/", methods=["GET"])
