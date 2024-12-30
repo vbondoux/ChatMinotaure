@@ -175,13 +175,19 @@ def chat_with_minotaure():
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
+    data = request.json
+
+    # Gérer l'événement url_verification
+    if data.get("type") == "url_verification":
+        challenge = data.get("challenge")
+        return jsonify({"challenge": challenge}), 200
+
+    # Vérifier l'authenticité de la requête Slack
     if not verify_slack_request(request):
         logger.error("Requête Slack non valide.")
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        data = request.json
-
         if "event" in data:
             event = data["event"]
 
@@ -203,6 +209,7 @@ def slack_events():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/chat_closed", methods=["POST"])
 def chat_closed():
