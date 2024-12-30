@@ -157,11 +157,12 @@ def chat_with_minotaure():
             context = load_context_from_airtable()
         else:
             # Rechercher la conversation existante
+            logger.debug(f"Recherche dans Airtable pour ConversationID : {conversation_id}")
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
-            if records:
-                thread_ts = records[0]["fields"].get("SlackThreadTS")
-                logger.debug(f"Conversation trouvée : {conversation_id}, thread_ts : {thread_ts}")
 
+            if records:
+                logger.debug(f"Enregistrements trouvés pour ConversationID : {records}")
+                thread_ts = records[0]["fields"].get("SlackThreadTS")
                 if not thread_ts:
                     logger.error(f"SlackThreadTS introuvable pour ConversationID : {conversation_id}")
                     return jsonify({"error": "SlackThreadTS introuvable"}), 500
@@ -172,7 +173,7 @@ def chat_with_minotaure():
                 for msg in messages:
                     context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
             else:
-                logger.warning(f"Aucune conversation trouvée avec ConversationID : {conversation_id}")
+                logger.warning(f"Aucun enregistrement trouvé pour ConversationID : {conversation_id}")
                 return jsonify({"error": "Conversation introuvable"}), 404
 
         # Enregistrer le message utilisateur
