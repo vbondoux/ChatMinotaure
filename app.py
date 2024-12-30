@@ -203,7 +203,19 @@ def chat_with_minotaure():
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/chat_closed", methods=["POST"])
+def chat_closed():
+    try:
+        # Envoyer une notification Slack
+        message = request.json.get("message", "Chatbot fermé par l'utilisateur")
+        send_slack_message(f":door: Notification : {message}", thread_ts=None)
 
+        logger.info(f"Notification Slack envoyée : {message}")
+        return jsonify({"status": "success", "message": "Notification envoyée"}), 200
+    except Exception as e:
+        logger.error(f"Erreur lors de la notification de fermeture : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+        
 @app.route("/", methods=["GET"])
 def health_check():
     return "OK", 200
