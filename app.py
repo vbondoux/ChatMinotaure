@@ -172,7 +172,7 @@ def chat_with_minotaure():
             else:
                 return jsonify({"error": "Conversation introuvable"}), 404
 
-        save_message(conversation_id, "user", user_message)
+        save_message(records[0]["id"], "user", user_message)
         context.append({"role": "user", "content": user_message})
 
         response = openai.ChatCompletion.create(
@@ -184,7 +184,7 @@ def chat_with_minotaure():
 
         assistant_message = response["choices"][0]["message"]["content"]
         context.append({"role": "assistant", "content": assistant_message})
-        save_message(conversation_id, "assistant", assistant_message)
+        save_message(records[0]["id"], "assistant", assistant_message)
 
         send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
         send_slack_message(f":taurus: Minotaure : {assistant_message}", channel="#conversationsite", thread_ts=thread_ts)
@@ -230,8 +230,8 @@ def slack_events():
                         # Répondre manuellement
                         bot_response = "Je te parle"
                         send_slack_message(f":taurus: {bot_response}", channel=channel_id, thread_ts=thread_ts, manual=True)
-                        save_message(conversation_id, "user", user_message)  # Utilise l'UUID ici
-                        save_message(conversation_id, "assistant", bot_response)  # Utilise l'UUID ici
+                        save_message(record_id, "user", user_message)  # Utilise l'UUID ici
+                        save_message(record_id, "assistant", bot_response)  # Utilise l'UUID ici
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
