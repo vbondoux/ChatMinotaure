@@ -128,6 +128,7 @@ def create_conversation(user=None):
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None, None
+
 # Fonction pour enregistrer un message
 def save_message(conversation_record_id, role, content):
     try:
@@ -144,7 +145,6 @@ def save_message(conversation_record_id, role, content):
         logger.info(f"Message enregistré avec succès : {data}")
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
-
 
 @app.route("/chat", methods=["POST"])
 def chat_with_minotaure():
@@ -208,51 +208,3 @@ def slack_events():
 
             if event.get("type") == "message" and not event.get("bot_id"):
                 user_message = event.get("text")
-                channel_id = event.get("channel")
-                thread_ts = event.get("thread_ts")
-
-                # Récupérer la conversation depuis Airtable
-                records = airtable_conversations.all(formula=f"{{SlackThreadTS}} = '{thread_ts}'")
-                if records:
-                    # Normaliser le mode pour comparaison
-                    mode = records[0]["fields"].get("Mode", "automatique").lower()
-                    if mode == "manuel":
-                        # Répondre manuellement
-                        send_slack_message(f":taurus: {user_message}", channel=channel_id, thread_ts=thread_ts, manual=True)
-                        logger.info(f"Message manuel envoyé pour thread_ts {thread_ts}.")
-                    else:
-                        logger.info("Mode automatique actif, aucune réponse manuelle.")
-        return jsonify({"status": "ok"}), 200
-    except Exception as e:
-        logger.error(f"Erreur dans l'endpoint Slack events : {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route("/chat_closed", methods=["POST"])
-def chat_closed():
-    try:
-        data = request.json
-        conversation_id = data.get("conversation_id")
-        message = data.get("message", "Chatbot fermé par l'utilisateur")
-
-        records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
-        if not records:
-            return jsonify({"error": "Conversation introuvable"}), 404
-
-        thread_ts = records[0]["fields"].get("SlackThreadTS")
-        if not thread_ts:
-            return jsonify({"error": "Thread TS introuvable"}), 404
-
-        send_slack_message(f":door: Notification : {message}", channel="#conversationsite", thread_ts=thread_ts)
-
-        return jsonify({"status": "success", "message": "Notification envoyée"}), 200
-    except Exception as e:
-        logger.error(f"Erreur lors de la notification de fermeture : {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/", methods=["GET"])
-def health_check():
-    return "OK", 200
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
