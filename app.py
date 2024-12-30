@@ -177,6 +177,7 @@ def chat_with_minotaure():
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
+            records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
         else:
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if not records:
@@ -187,8 +188,8 @@ def chat_with_minotaure():
             messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
             for msg in messages:
                 context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
-
-        save_message(records[0]["id"], "user", user_message)
+        record_id = records[0].get("id")
+        save_message(record_id, "user", user_message)
         context.append({"role": "user", "content": user_message})
 
         response = openai.ChatCompletion.create(
@@ -200,7 +201,8 @@ def chat_with_minotaure():
 
         assistant_message = response["choices"][0]["message"]["content"]
         context.append({"role": "assistant", "content": assistant_message})
-        save_message(records[0]["id"], "assistant", assistant_message)
+        
+        save_message(record_id, "assistant", assistant_message)
 
         send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
         send_slack_message(f":taurus: Minotaure : {assistant_message}", channel="#conversationsite", thread_ts=thread_ts)
