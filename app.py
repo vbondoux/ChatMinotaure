@@ -266,7 +266,7 @@ def chat_closed():
             return jsonify({"error": "Thread TS introuvable"}), 404
 
         # Envoyer une notification Slack
-        send_slack_message(f":door: Notification : {message}", thread_ts=thread_ts)
+        send_slack_message(f":door: Notification : {message}",channel="#conversationsite",thread_ts=thread_ts)
 
         return jsonify({"status": "success", "message": "Notification envoyée"}), 200
     except Exception as e:
@@ -290,7 +290,7 @@ def chat_reopened():
             return jsonify({"error": "Thread TS introuvable"}), 404
 
         # Envoyer une notification Slack
-        send_slack_message(f":door: Notification : {message}", thread_ts=thread_ts)
+        send_slack_message(f":door: Notification : {message}",channel="#conversationsite",thread_ts=thread_ts)
 
         return jsonify({"status": "success", "message": "Notification envoyée"}), 200
     except Exception as e:
