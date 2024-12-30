@@ -150,20 +150,24 @@ def chat_with_minotaure():
             return jsonify({"error": "Message non fourni"}), 400
 
         if not conversation_id:
-            # Créer une nouvelle conversation si aucune n'est fournie
+            # Création d'une nouvelle conversation
             conversation_id, thread_ts = create_conversation(user=user_id)
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
         else:
-            # Rechercher la conversation avec le ConversationID fourni
+            # Rechercher la conversation existante
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if records:
                 thread_ts = records[0]["fields"].get("SlackThreadTS")
                 logger.debug(f"Conversation trouvée : {conversation_id}, thread_ts : {thread_ts}")
-                context = load_context_from_airtable()
 
-                # Charger les messages associés à cette conversation
+                if not thread_ts:
+                    logger.error(f"SlackThreadTS introuvable pour ConversationID : {conversation_id}")
+                    return jsonify({"error": "SlackThreadTS introuvable"}), 500
+
+                # Charger les messages associés
+                context = load_context_from_airtable()
                 messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
                 for msg in messages:
                     context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
