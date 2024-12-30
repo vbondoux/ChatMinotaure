@@ -249,6 +249,55 @@ def slack_events():
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/chat_closed", methods=["POST"])
+def chat_closed():
+    try:
+        data = request.json
+        conversation_id = data.get("conversation_id")
+        message = data.get("message", "Chatbot fermé par l'utilisateur")
+
+        # Récupérer le thread_ts depuis Airtable
+        records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+        if not records:
+            return jsonify({"error": "Conversation introuvable"}), 404
+
+        thread_ts = records[0]["fields"].get("SlackThreadTS")
+        if not thread_ts:
+            return jsonify({"error": "Thread TS introuvable"}), 404
+
+        # Envoyer une notification Slack
+        send_slack_message(f":door: Notification : {message}", thread_ts=thread_ts)
+
+        return jsonify({"status": "success", "message": "Notification envoyée"}), 200
+    except Exception as e:
+        logger.error(f"Erreur lors de la notification de fermeture : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/chat_reopened", methods=["POST"])
+def chat_reopened():
+    try:
+        data = request.json
+        conversation_id = data.get("conversation_id")
+        message = data.get("message", "Chatbot rouvert par l'utilisateur")
+
+        # Récupérer le thread_ts depuis Airtable
+        records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+        if not records:
+            return jsonify({"error": "Conversation introuvable"}), 404
+
+        thread_ts = records[0]["fields"].get("SlackThreadTS")
+        if not thread_ts:
+            return jsonify({"error": "Thread TS introuvable"}), 404
+
+        # Envoyer une notification Slack
+        send_slack_message(f":door: Notification : {message}", thread_ts=thread_ts)
+
+        return jsonify({"status": "success", "message": "Notification envoyée"}), 200
+    except Exception as e:
+        logger.error(f"Erreur lors de la notification de réouverture : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route("/", methods=["GET"])
 def health_check():
     return "OK", 200
