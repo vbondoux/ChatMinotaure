@@ -241,10 +241,8 @@ def slack_events():
                         if mode != "manuel":
                             airtable_conversations.update(records[0]["id"], {"Mode": "manuel"})
 
-                        bot_response = "Je te parle"
                         send_slack_message(f":taurus: {bot_response}", channel=channel_id, thread_ts=thread_ts, manual=True)
-                        save_message(records[0]["id"], "user", user_message)
-                        save_message(records[0]["id"], "assistant", bot_response)
+                        save_message(records[0]["id"], "assistant", user_message)
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
