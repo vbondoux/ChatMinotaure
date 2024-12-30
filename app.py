@@ -198,10 +198,7 @@ def chat_with_minotaure():
         # Vérifiez si le mode est manuel
         if mode == "manuel":
             send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
-            return jsonify({
-                "response": "Message reçu. Le mode manuel est actif. Veuillez consulter Slack pour une réponse.",
-                "conversation_id": conversation_id
-            })
+           
 
         # Appeler OpenAI pour une réponse automatique uniquement en mode automatique
         response = openai.ChatCompletion.create(
@@ -258,6 +255,10 @@ def slack_events():
 
                     bot_response = None  # Initialisation par défaut
 
+                    if mode == "manuel":
+                        bot_response = "Message reçu via Slack en mode manuel"
+                        notify_new_message(conversation_id, "assistant", bot_response)
+
                         save_message(record_id, "user", user_message)
                         save_message(record_id, "assistant", bot_response)
 
@@ -265,6 +266,7 @@ def slack_events():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/chat_closed", methods=["POST"])
 def chat_closed():
