@@ -150,25 +150,32 @@ def chat_with_minotaure():
             return jsonify({"error": "Message non fourni"}), 400
 
         if not conversation_id:
+            # Créer une nouvelle conversation si aucune n'est fournie
             conversation_id, thread_ts = create_conversation(user=user_id)
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
         else:
+            # Rechercher la conversation avec le ConversationID fourni
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if records:
                 thread_ts = records[0]["fields"].get("SlackThreadTS")
+                logger.debug(f"Conversation trouvée : {conversation_id}, thread_ts : {thread_ts}")
                 context = load_context_from_airtable()
+
+                # Charger les messages associés à cette conversation
                 messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
                 for msg in messages:
                     context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
             else:
-                logger.warning(f"Aucune conversation trouvée avec ConversationID: {conversation_id}")
+                logger.warning(f"Aucune conversation trouvée avec ConversationID : {conversation_id}")
                 return jsonify({"error": "Conversation introuvable"}), 404
 
+        # Enregistrer le message utilisateur
         save_message(conversation_id, "user", user_message)
         context.append({"role": "user", "content": user_message})
 
+        # Générer une réponse avec OpenAI
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=context,
@@ -180,14 +187,17 @@ def chat_with_minotaure():
         context.append({"role": "assistant", "content": assistant_message})
         save_message(conversation_id, "assistant", assistant_message)
 
+        # Envoyer les messages à Slack
         send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", thread_ts=thread_ts)
         send_slack_message(f":taurus: Minotaure : {assistant_message}", thread_ts=thread_ts)
 
         logger.debug(f"thread_ts utilisé dans la conversation : {thread_ts}")
         return jsonify({"response": assistant_message, "conversation_id": conversation_id})
+
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/", methods=["GET"])
 def health_check():
