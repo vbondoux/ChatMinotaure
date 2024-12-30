@@ -248,6 +248,11 @@ def slack_events():
                     conversation_id = records[0]["fields"].get("ConversationID")
                     mode = records[0]["fields"].get("Mode", "automatique").lower()
 
+                    # Passer automatiquement en mode manuel si un message est écrit dans Slack
+                    if mode != "manuel":
+                        airtable_conversations.update(record_id, {"Mode": "manuel"})
+                        logger.info(f"Mode mis à jour en 'manuel' pour la conversation {conversation_id}.")
+
                     # Notifier le client WebSocket du message utilisateur
                     notify_new_message(conversation_id, "user", user_message)
 
@@ -260,15 +265,10 @@ def slack_events():
                         save_message(record_id, "user", user_message)
                         save_message(record_id, "assistant", bot_response)
 
-                    # Enregistrement des messages uniquement si nécessaire
-                    if bot_response:
-                        logger.info(f"Message manuel envoyé : {bot_response}")
-
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @app.route("/chat_closed", methods=["POST"])
 def chat_closed():
