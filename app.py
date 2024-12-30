@@ -196,19 +196,13 @@ def chat_with_minotaure():
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
-    data = request.json
-
-    # Gérer l'événement url_verification
-    if data.get("type") == "url_verification":
-        challenge = data.get("challenge")
-        return jsonify({"challenge": challenge}), 200
-
-    # Vérifier l'authenticité de la requête Slack
     if not verify_slack_request(request):
         logger.error("Requête Slack non valide.")
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
+        data = request.json
+
         if "event" in data:
             event = data["event"]
 
@@ -217,10 +211,12 @@ def slack_events():
                 channel_id = event.get("channel")
                 thread_ts = event.get("thread_ts")
 
+                # Récupérer la conversation depuis Airtable
                 records = airtable_conversations.all(formula=f"{{SlackThreadTS}} = '{thread_ts}'")
                 if records:
-                    mode = records[0]["fields"].get("Mode", "Automatique")
-                    if mode == "Manuel":
+                    # Normaliser le mode pour comparaison
+                    mode = records[0]["fields"].get("Mode", "automatique").lower()
+                    if mode == "manuel":
                         # Répondre manuellement
                         send_slack_message(f":taurus: {user_message}", channel=channel_id, thread_ts=thread_ts, manual=True)
                         logger.info(f"Message manuel envoyé pour thread_ts {thread_ts}.")
