@@ -184,14 +184,25 @@ def chat_with_minotaure():
                 return jsonify({"error": "Conversation introuvable"}), 404
 
             thread_ts = records[0]["fields"].get("SlackThreadTS")
+            mode = records[0]["fields"].get("Mode", "automatique").lower()
             context = load_context_from_airtable()
             messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
             for msg in messages:
                 context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
+
         record_id = records[0].get("id")
         save_message(record_id, "user", user_message)
         context.append({"role": "user", "content": user_message})
 
+        # Vérifiez si le mode est manuel
+        if mode == "manuel":
+            send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
+            return jsonify({
+                "response": "Message reçu. Le mode manuel est actif. Veuillez consulter Slack pour une réponse.",
+                "conversation_id": conversation_id
+            })
+
+        # Appeler OpenAI pour une réponse automatique uniquement en mode automatique
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=context,
@@ -201,7 +212,7 @@ def chat_with_minotaure():
 
         assistant_message = response["choices"][0]["message"]["content"]
         context.append({"role": "assistant", "content": assistant_message})
-        
+
         save_message(record_id, "assistant", assistant_message)
 
         send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
@@ -211,6 +222,7 @@ def chat_with_minotaure():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
