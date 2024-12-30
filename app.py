@@ -117,7 +117,7 @@ def create_conversation(user=None):
             airtable_conversations.update(record_id, {"SlackThreadTS": thread_ts})
 
         logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}, thread_ts : {thread_ts}")
-        return record_id, thread_ts
+        return conversation_id, thread_ts
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None, None
@@ -155,7 +155,6 @@ def chat_with_minotaure():
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
-            return jsonify({"response": conversation_id, "conversation_id": conversation_id})
         else:
             # Rechercher la conversation existante
             logger.debug(f"Recherche dans Airtable pour ConversationID : {conversation_id}")
