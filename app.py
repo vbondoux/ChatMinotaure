@@ -1,3 +1,5 @@
+# app.py
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
@@ -10,12 +12,16 @@ import requests
 import hashlib
 import hmac
 import time
+from flask_socketio import SocketIO, emit
 
 # Initialiser Flask
 app = Flask(__name__)
 
 # Configurer CORS
 CORS(app)
+
+# Configurer SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Configurer les logs
 logging.basicConfig(level=logging.DEBUG)
@@ -58,6 +64,14 @@ def verify_slack_request(request):
     ).hexdigest()
 
     return hmac.compare_digest(my_signature, slack_signature)
+
+# Fonction pour notifier un nouvel événement de message via WebSocket
+def notify_new_message(conversation_id, role, content):
+    socketio.emit("new_message", {
+        "conversation_id": conversation_id,
+        "role": role,
+        "content": content
+    })
 
 # Fonction pour envoyer un message sur Slack
 def send_slack_message(text, channel, thread_ts=None, manual=False):
@@ -115,7 +129,6 @@ def create_conversation(user=None):
         record = airtable_conversations.create(data)
         record_id = record["id"]
 
-        # Ajout explicite du canal
         thread_ts = send_slack_message(
             ":taurus: Une conversation vient de démarrer sur le site du Minotaure.",
             channel="#conversationsite"
@@ -142,6 +155,9 @@ def save_message(conversation_record_id, role, content):
         }
         airtable_messages.create(data)
 
+        # Notifier le client WebSocket
+        notify_new_message(conversation_record_id, role, content)
+
         logger.info(f"Message enregistré avec succès : {data}")
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
@@ -161,19 +177,18 @@ def chat_with_minotaure():
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
-            records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
         else:
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
-            if records:
-                thread_ts = records[0]["fields"].get("SlackThreadTS")
-                context = load_context_from_airtable()
-                messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
-                for msg in messages:
-                    context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
-            else:
+            if not records:
                 return jsonify({"error": "Conversation introuvable"}), 404
-        record_id = records[0].get("id")
-        save_message(record_id, "user", user_message)
+
+            thread_ts = records[0]["fields"].get("SlackThreadTS")
+            context = load_context_from_airtable()
+            messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
+            for msg in messages:
+                context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
+
+        save_message(records[0]["id"], "user", user_message)
         context.append({"role": "user", "content": user_message})
 
         response = openai.ChatCompletion.create(
@@ -185,7 +200,7 @@ def chat_with_minotaure():
 
         assistant_message = response["choices"][0]["message"]["content"]
         context.append({"role": "assistant", "content": assistant_message})
-        save_message(record_id, "assistant", assistant_message)
+        save_message(records[0]["id"], "assistant", assistant_message)
 
         send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
         send_slack_message(f":taurus: Minotaure : {assistant_message}", channel="#conversationsite", thread_ts=thread_ts)
@@ -212,34 +227,31 @@ def slack_events():
                 channel_id = event.get("channel")
                 thread_ts = event.get("thread_ts")
 
-                # Récupérer la conversation depuis Airtable
                 records = airtable_conversations.all(formula=f"{{SlackThreadTS}} = '{thread_ts}'")
                 if records:
-                    conversation_id = records[0]["fields"].get("ConversationID")  # Utiliser l'UUID pour save_message
-                    record_id = records[0]["id"]  # ID interne Airtable
+                    conversation_id = records[0]["fields"].get("ConversationID")
                     mode = records[0]["fields"].get("Mode", "automatique").lower()
 
                     if user_message.lower() == "bot":
-                        airtable_conversations.update(record_id, {"Mode": "automatique"})
+                        airtable_conversations.update(records[0]["id"], {"Mode": "automatique"})
                         send_slack_message(":robot_face: Mode automatique activé.", channel=channel_id, thread_ts=thread_ts)
-                        logger.info(f"Mode automatique activé pour la conversation {conversation_id}.")
                     else:
                         if mode != "manuel":
-                            airtable_conversations.update(record_id, {"Mode": "manuel"})
-                            logger.info(f"Mode manuel activé pour la conversation {conversation_id}.")
+                            airtable_conversations.update(records[0]["id"], {"Mode": "manuel"})
 
-                        # Répondre manuellement
-                        save_message(record_id, "assistant", user_message)  # Utilise l'UUID ici
+                        bot_response = "Je te parle"
+                        send_slack_message(f":taurus: {bot_response}", channel=channel_id, thread_ts=thread_ts, manual=True)
+                        save_message(records[0]["id"], "user", user_message)
+                        save_message(records[0]["id"], "assistant", bot_response)
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @app.route("/", methods=["GET"])
 def health_check():
     return "OK", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    socketio.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
