@@ -229,10 +229,7 @@ def slack_events():
                             logger.info(f"Mode manuel activé pour la conversation {conversation_id}.")
 
                         # Répondre manuellement
-                        bot_response = "Je te parle"
-                        send_slack_message(f":taurus: {bot_response}", channel=channel_id, thread_ts=thread_ts, manual=True)
-                        save_message(record_id, "user", user_message)  # Utilise l'UUID ici
-                        save_message(record_id, "assistant", bot_response)  # Utilise l'UUID ici
+                        save_message(record_id, "assistant", user_message)  # Utilise l'UUID ici
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
