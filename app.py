@@ -206,15 +206,27 @@ def chat_with_minotaure():
 @app.route("/chat_closed", methods=["POST"])
 def chat_closed():
     try:
-        # Envoyer une notification Slack
-        message = request.json.get("message", "Chatbot fermé par l'utilisateur")
-        send_slack_message(f":door: Notification : {message}", thread_ts=None)
+        data = request.json
+        conversation_id = data.get("conversation_id")
+        message = data.get("message", "Chatbot fermé par l'utilisateur")
 
-        logger.info(f"Notification Slack envoyée : {message}")
+        # Récupérer le thread_ts depuis Airtable
+        records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+        if not records:
+            return jsonify({"error": "Conversation introuvable"}), 404
+
+        thread_ts = records[0]["fields"].get("SlackThreadTS")
+        if not thread_ts:
+            return jsonify({"error": "Thread TS introuvable"}), 404
+
+        # Envoyer une notification Slack
+        send_slack_message(f":door: Notification : {message}", thread_ts=thread_ts)
+
         return jsonify({"status": "success", "message": "Notification envoyée"}), 200
     except Exception as e:
         logger.error(f"Erreur lors de la notification de fermeture : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
         
 @app.route("/", methods=["GET"])
 def health_check():
