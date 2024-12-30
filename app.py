@@ -229,25 +229,34 @@ def slack_events():
                 channel_id = event.get("channel")
                 thread_ts = event.get("thread_ts")
 
+                # Récupérer la conversation depuis Airtable
                 records = airtable_conversations.all(formula=f"{{SlackThreadTS}} = '{thread_ts}'")
                 if records:
+                    record_id = records[0]["id"]
                     conversation_id = records[0]["fields"].get("ConversationID")
                     mode = records[0]["fields"].get("Mode", "automatique").lower()
 
-                    if user_message.lower() == "bot":
-                        airtable_conversations.update(records[0]["id"], {"Mode": "automatique"})
-                        send_slack_message(":robot_face: Mode automatique activé.", channel=channel_id, thread_ts=thread_ts)
-                    else:
-                        if mode != "manuel":
-                            airtable_conversations.update(records[0]["id"], {"Mode": "manuel"})
+                    # Notifier le client WebSocket du message utilisateur
+                    notify_new_message(conversation_id, "user", user_message)
 
-                        send_slack_message(f":taurus: {bot_response}", channel=channel_id, thread_ts=thread_ts, manual=True)
-                        save_message(records[0]["id"], "assistant", user_message)
+                    bot_response = None  # Initialisation par défaut
+
+                    if mode == "manuel":
+                        bot_response = "Message reçu via Slack en mode manuel"
+                        notify_new_message(conversation_id, "assistant", bot_response)
+
+                        save_message(record_id, "user", user_message)
+                        save_message(record_id, "assistant", bot_response)
+
+                    # Enregistrement des messages uniquement si nécessaire
+                    if bot_response:
+                        logger.info(f"Message manuel envoyé : {bot_response}")
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint Slack events : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/chat_closed", methods=["POST"])
 def chat_closed():
