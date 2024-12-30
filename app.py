@@ -258,10 +258,6 @@ def slack_events():
 
                     bot_response = None  # Initialisation par défaut
 
-                    if mode == "manuel":
-                        bot_response = "Message reçu via Slack en mode manuel"
-                        notify_new_message(conversation_id, "assistant", bot_response)
-
                         save_message(record_id, "user", user_message)
                         save_message(record_id, "assistant", bot_response)
 
