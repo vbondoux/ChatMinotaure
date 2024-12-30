@@ -256,10 +256,10 @@ def slack_events():
                         logger.info(f"Mode mis à jour en 'manuel' pour la conversation {conversation_id}.")
 
                     # Notifier le client WebSocket du message utilisateur
-                    notify_new_message(conversation_id, "user", user_message)
+                    notify_new_message(conversation_id, "assistant", user_message)
 
                     # Enregistrer le message dans Airtable
-                    save_message(record_id, "user", user_message)
+                    save_message(record_id, "assistant", user_message)
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
