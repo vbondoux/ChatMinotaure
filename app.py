@@ -208,3 +208,38 @@ def slack_events():
 
             if event.get("type") == "message" and not event.get("bot_id"):
                 user_message = event.get("text")
+                channel_id = event.get("channel")
+                thread_ts = event.get("thread_ts")
+
+                # Récupérer la conversation depuis Airtable
+                records = airtable_conversations.all(formula=f"{{SlackThreadTS}} = '{thread_ts}'")
+                if records:
+                    conversation_id = records[0]["fields"].get("ConversationID")
+                    mode = records[0]["fields"].get("Mode", "automatique").lower()
+
+                    if user_message.lower() == "bot":
+                        airtable_conversations.update(records[0]["id"], {"Mode": "automatique"})
+                        send_slack_message(":robot_face: Mode automatique activé.", channel=channel_id, thread_ts=thread_ts)
+                        logger.info(f"Mode automatique activé pour la conversation {conversation_id}.")
+                    else:
+                        if mode != "manuel":
+                            airtable_conversations.update(records[0]["id"], {"Mode": "manuel"})
+                            logger.info(f"Mode manuel activé pour la conversation {conversation_id}.")
+
+                        # Répondre manuellement
+                        bot_response = "Je te parle"
+                        send_slack_message(f":taurus: {bot_response}", channel=channel_id, thread_ts=thread_ts, manual=True)
+                        save_message(conversation_id, "user", user_message)
+                        save_message(conversation_id, "assistant", bot_response)
+
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        logger.error(f"Erreur dans l'endpoint Slack events : {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/", methods=["GET"])
+def health_check():
+    return "OK", 200
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
