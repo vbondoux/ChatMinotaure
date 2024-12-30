@@ -245,16 +245,21 @@ def slack_events():
                     conversation_id = records[0]["fields"].get("ConversationID")
                     mode = records[0]["fields"].get("Mode", "automatique").lower()
 
+                    if user_message.lower() == "bot":
+                        airtable_conversations.update(record_id, {"Mode": "automatique"})
+                        logger.info(f"Mode mis à jour en 'automatique' pour la conversation {conversation_id}.")
+                        return jsonify({"status": "ok", "message": "Mode automatique activé."}), 200
+
                     # Passer automatiquement en mode manuel si un message est écrit dans Slack
                     if mode != "manuel":
                         airtable_conversations.update(record_id, {"Mode": "manuel"})
                         logger.info(f"Mode mis à jour en 'manuel' pour la conversation {conversation_id}.")
 
                     # Notifier le client WebSocket du message utilisateur
-                    notify_new_message(conversation_id, "assistant", user_message)
+                    notify_new_message(conversation_id, "user", user_message)
 
                     # Enregistrer le message dans Airtable
-                    save_message(record_id, "assistant", user_message)
+                    save_message(record_id, "user", user_message)
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
