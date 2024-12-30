@@ -115,7 +115,11 @@ def create_conversation(user=None):
         record = airtable_conversations.create(data)
         record_id = record["id"]
 
-        thread_ts = send_slack_message(":taurus: Une conversation vient de démarrer sur le site du Minotaure.")
+        # Ajout explicite du canal
+        thread_ts = send_slack_message(
+            ":taurus: Une conversation vient de démarrer sur le site du Minotaure.",
+            channel="#conversationsite"
+        )
         if thread_ts:
             airtable_conversations.update(record_id, {"SlackThreadTS": thread_ts})
 
@@ -124,6 +128,7 @@ def create_conversation(user=None):
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None, None
+
 
 @app.route("/chat", methods=["POST"])
 def chat_with_minotaure():
