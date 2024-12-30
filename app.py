@@ -178,6 +178,7 @@ def chat_with_minotaure():
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
+            mode = "automatique"  # Initialiser le mode par défaut pour une nouvelle conversation
         else:
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if not records:
@@ -222,7 +223,6 @@ def chat_with_minotaure():
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
         return jsonify({"error": str(e)}), 500
-
 
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
