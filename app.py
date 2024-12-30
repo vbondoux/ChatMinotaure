@@ -155,7 +155,7 @@ def chat_with_minotaure():
             if not conversation_id:
                 return jsonify({"error": "Impossible de créer une conversation"}), 500
             context = load_context_from_airtable()
-            return jsonify({"response": "Conversation créée avec succès", "conversation_id": conversation_id})
+            return jsonify({"response": conversation_id, "conversation_id": conversation_id})
         else:
             # Rechercher la conversation existante
             logger.debug(f"Recherche dans Airtable pour ConversationID : {conversation_id}")
