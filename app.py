@@ -128,6 +128,22 @@ def create_conversation(user=None):
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
         return None, None
+# Fonction pour enregistrer un message
+def save_message(conversation_record_id, role, content):
+    try:
+        message_id = str(uuid.uuid4())
+        data = {
+            "MessageID": message_id,
+            "ConversationID": [conversation_record_id],
+            "Role": role,
+            "Content": content,
+            "Timestamp": datetime.now().isoformat()
+        }
+        airtable_messages.create(data)
+
+        logger.info(f"Message enregistré avec succès : {data}")
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
 
 @app.route("/chat", methods=["POST"])
