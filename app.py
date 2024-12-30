@@ -65,9 +65,11 @@ def send_slack_message(text, channel="#conversationsite", thread_ts=None):
             data["thread_ts"] = thread_ts
 
         response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200 and response.json().get("ok"):
+        response_data = response.json()
+        if response.status_code == 200 and response_data.get("ok"):
             logger.info(f"Message Slack envoyé : {text}")
-            return response.json().get("ts")
+            logger.debug(f"thread_ts utilisé : {thread_ts}")
+            return response_data.get("ts")
         else:
             logger.error(f"Erreur lors de l'envoi du message Slack : {response.text}")
             return None
@@ -114,7 +116,7 @@ def create_conversation(user=None):
         if thread_ts:
             airtable_conversations.update(record_id, {"SlackThreadTS": thread_ts})
 
-        logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}")
+        logger.info(f"Nouvelle conversation créée avec Record ID : {record_id}, thread_ts : {thread_ts}")
         return record_id, thread_ts
     except Exception as e:
         logger.error(f"Erreur lors de la création de la conversation : {e}")
@@ -156,13 +158,13 @@ def chat_with_minotaure():
             records = airtable_conversations.all(formula=f"{{ConversationID}} = '{conversation_id}'")
             if records:
                 thread_ts = records[0]["fields"].get("SlackThreadTS")
-                context = [{"role": "system", "content": load_context_from_airtable()}]  # Recharge le contexte initial
+                context = load_context_from_airtable()
                 messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
                 for msg in messages:
                     context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
             else:
-               logger.warning(f"Aucune conversation trouvée avec ConversationID: {conversation_id}")
-               return jsonify({"error": "Conversation introuvable"}), 404
+                logger.warning(f"Aucune conversation trouvée avec ConversationID: {conversation_id}")
+                return jsonify({"error": "Conversation introuvable"}), 404
 
         save_message(conversation_id, "user", user_message)
         context.append({"role": "user", "content": user_message})
@@ -181,6 +183,7 @@ def chat_with_minotaure():
         send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", thread_ts=thread_ts)
         send_slack_message(f":taurus: Minotaure : {assistant_message}", thread_ts=thread_ts)
 
+        logger.debug(f"thread_ts utilisé dans la conversation : {thread_ts}")
         return jsonify({"response": assistant_message, "conversation_id": conversation_id})
     except Exception as e:
         logger.error(f"Erreur dans l'endpoint '/chat': {e}")
