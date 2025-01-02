@@ -1,5 +1,5 @@
 # app.py
-import sys
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
@@ -13,8 +13,6 @@ import hashlib
 import hmac
 import time
 from flask_socketio import SocketIO, emit
-from cron_task import process_conversations  # Importer votre tâche cron
-from multiprocessing import Process
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -316,42 +314,11 @@ def chat_reopened():
     except Exception as e:
         logger.error(f"Erreur lors de la notification de réouverture : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-        
+
+
 @app.route("/", methods=["GET"])
 def health_check():
     return "OK", 200
 
-@app.route("/run_cron", methods=["POST"])
-def run_cron():
-    try:
-        process_conversations()
-        return jsonify({"status": "success", "message": "Cron job exécuté avec succès"}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-# Fonction pour démarrer Flask
-def start_flask():
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
-
-# Fonction pour démarrer le Cron Job
-def start_cron():
-    print("Démarrage du Cron Job...")
-    process_conversations()
-
 if __name__ == "__main__":
-    # Vérifiez si le script est exécuté comme tâche Cron ou comme serveur API
-    if len(sys.argv) > 1 and sys.argv[1] == "cron":
-        # Mode Cron
-        start_cron()
-    else:
-        # Mode API Flask
-        flask_process = Process(target=start_flask)
-        cron_process = Process(target=start_cron)
-
-        # Lancer les deux processus
-        flask_process.start()
-        cron_process.start()
-
-        # Attendre la fin des processus
-        flask_process.join()
-        cron_process.join()
+    socketio.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
