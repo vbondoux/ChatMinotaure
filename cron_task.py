@@ -1,3 +1,4 @@
+import os
 from enrich_prompt import process_conversations
 
 if __name__ == "__main__":
