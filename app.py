@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import time
 from flask_socketio import SocketIO, emit
+from cron_task import process_conversations
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -314,7 +315,14 @@ def chat_reopened():
     except Exception as e:
         logger.error(f"Erreur lors de la notification de réouverture : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
+        
+@app.route("/run_cron", methods=["POST"])
+def run_cron():
+    try:
+        process_conversations()
+        return jsonify({"status": "success", "message": "Cron job exécuté avec succès"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/", methods=["GET"])
 def health_check():
