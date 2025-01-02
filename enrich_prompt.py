@@ -3,8 +3,10 @@ from pyairtable import Api
 from collections import Counter
 
 # Configurations API Airtable
-AIRTABLE_API_KEY = "votre_clé_api"
-BASE_ID = "votre_base_id"
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+api = Api(AIRTABLE_API_KEY)
+base = api.base(BASE_ID)
 CONVERSATIONS_TABLE = "Conversations"
 MESSAGES_TABLE = "Messages"
 
