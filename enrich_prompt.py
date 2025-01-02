@@ -1,4 +1,5 @@
 import openai
+import os 
 from pyairtable import Api
 from collections import Counter
 
