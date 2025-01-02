@@ -13,7 +13,8 @@ import hashlib
 import hmac
 import time
 from flask_socketio import SocketIO, emit
-from cron_task import process_conversations
+from cron_task import process_conversations  # Importer votre tâche cron
+from multiprocessing import Process
 
 # Initialiser Flask
 app = Flask(__name__)
@@ -328,5 +329,30 @@ def run_cron():
 def health_check():
     return "OK", 200
 
-if __name__ == "__main__":
+# Démarrage des services
+def start_flask():
     socketio.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+def start_cron():
+    print("Démarrage du Cron Job...")
+    process_conversations()
+
+if __name__ == "__main__":
+    # Vérifier le mode d'exécution à partir de la variable d'environnement
+    run_mode = os.getenv("RUN_MODE", "API").upper()
+
+    if run_mode == "CRON":
+        # Lancer uniquement le cron job
+        start_cron()
+    else:
+        # Démarrer Flask et le cron job en parallèle
+        flask_process = Process(target=start_flask)
+        cron_process = Process(target=start_cron)
+
+        # Lancer les deux processus
+        flask_process.start()
+        cron_process.start()
+
+        # Attendre la fin des processus
+        flask_process.join()
+        cron_process.join()
