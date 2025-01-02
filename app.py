@@ -1,5 +1,5 @@
 # app.py
-
+import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
@@ -317,6 +317,10 @@ def chat_reopened():
         logger.error(f"Erreur lors de la notification de réouverture : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
         
+@app.route("/", methods=["GET"])
+def health_check():
+    return "OK", 200
+
 @app.route("/run_cron", methods=["POST"])
 def run_cron():
     try:
@@ -325,27 +329,22 @@ def run_cron():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/", methods=["GET"])
-def health_check():
-    return "OK", 200
-
-# Démarrage des services
+# Fonction pour démarrer Flask
 def start_flask():
-    socketio.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
 
+# Fonction pour démarrer le Cron Job
 def start_cron():
     print("Démarrage du Cron Job...")
     process_conversations()
 
 if __name__ == "__main__":
-    # Vérifier le mode d'exécution à partir de la variable d'environnement
-    run_mode = os.getenv("RUN_MODE", "API").upper()
-
-    if run_mode == "CRON":
-        # Lancer uniquement le cron job
+    # Vérifiez si le script est exécuté comme tâche Cron ou comme serveur API
+    if len(sys.argv) > 1 and sys.argv[1] == "cron":
+        # Mode Cron
         start_cron()
     else:
-        # Démarrer Flask et le cron job en parallèle
+        # Mode API Flask
         flask_process = Process(target=start_flask)
         cron_process = Process(target=start_cron)
 
