@@ -153,16 +153,14 @@ def save_message(conversation_record_id, role, content):
             "Content": content,
             "Timestamp": datetime.now().isoformat()
         }
-        record = airtable_messages.create(data)
-        record_id = record["id"]
+        airtable_messages.create(data)
+       
         
         # Notifier le client WebSocket
         notify_new_message(conversation_record_id, role, content)
 
         logger.info(f"Message enregistré avec succès : {data}")
 
-        # Marquer le message comme affiché si nécessaire
-        airtable_messages.update(record_id, {"Displayed": True})
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
@@ -348,6 +346,16 @@ def get_messages(conversation_id):
         logger.error(f"Erreur lors de la récupération des messages : {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/messages/<message_id>/displayed", methods=["POST"])
+def mark_message_as_displayed(message_id):
+    try:
+        # Mettre à jour la colonne Displayed pour le message spécifié
+        airtable_messages.update(message_id, {"Displayed": True})
+        logger.info(f"Message {message_id} marqué comme affiché.")
+        return jsonify({"status": "success", "message": f"Message {message_id} marqué comme affiché."}), 200
+    except Exception as e:
+        logger.error(f"Erreur lors de la mise à jour de 'Displayed' pour le message {message_id}: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route("/", methods=["GET"])
