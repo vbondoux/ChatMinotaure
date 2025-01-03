@@ -318,25 +318,20 @@ def chat_reopened():
 @app.route("/messages/<conversation_id>", methods=["GET"])
 def get_messages(conversation_id):
     try:
-        since = request.args.get("since", None)
+        # Construire la formule pour Airtable
         formula = f"AND({{ConversationID}} = '{conversation_id}', NOT({{Displayed}}))"
         messages = airtable_messages.all(formula=formula, sort=["Timestamp"])
 
-        if since:
-            since_time = datetime.fromtimestamp(float(since) / 1000, tz=timezone.utc)
-            messages = [
-                msg for msg in messages 
-                if datetime.fromisoformat(msg["fields"]["Timestamp"]).astimezone(timezone.utc) > since_time
-            ]
-
+        # Construire la réponse et mettre à jour les messages comme affichés
         response = []
         for msg in messages:
+            # Ajouter le message à la réponse
             response.append({
                 "role": msg["fields"]["Role"],
                 "content": msg["fields"]["Content"],
                 "timestamp": msg["fields"]["Timestamp"]
             })
-            # Marquer comme affiché
+            # Mettre à jour la colonne Displayed
             airtable_messages.update(msg["id"], {"Displayed": True})
 
         return jsonify({"messages": response})
