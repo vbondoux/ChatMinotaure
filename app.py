@@ -314,6 +314,21 @@ def chat_reopened():
     except Exception as e:
         logger.error(f"Erreur lors de la notification de réouverture : {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+        
+@app.route("/messages/<conversation_id>", methods=["GET"])
+def get_messages(conversation_id):
+    try:
+        since = request.args.get("since", None)
+        messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
+        if since:
+            since_time = datetime.fromtimestamp(float(since) / 1000)
+            messages = [msg for msg in messages if datetime.fromisoformat(msg["fields"]["Timestamp"]) > since_time]
+
+        response = [{"role": msg["fields"]["Role"], "content": msg["fields"]["Content"], "timestamp": msg["fields"]["Timestamp"]} for msg in messages]
+        return jsonify({"messages": response})
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des messages : {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/", methods=["GET"])
