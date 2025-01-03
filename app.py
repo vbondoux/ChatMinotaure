@@ -319,31 +319,31 @@ def chat_reopened():
 def get_messages(conversation_id):
     try:
         since = request.args.get("since", None)
-        messages = airtable_messages.all(formula=f"{{ConversationID}} = '{conversation_id}'", sort=["Timestamp"])
-        
-        if since:
-            # Convertir `since` en datetime conscient du fuseau horaire
-            since_time = datetime.fromtimestamp(float(since) / 1000, tz=timezone.utc)
+        formula = f"AND({{ConversationID}} = '{conversation_id}', NOT({{Displayed}}))"
+        messages = airtable_messages.all(formula=formula, sort=["Timestamp"])
 
-            # Filtrer les messages pour ne conserver que ceux après `since_time`
+        if since:
+            since_time = datetime.fromtimestamp(float(since) / 1000, tz=timezone.utc)
             messages = [
                 msg for msg in messages 
                 if datetime.fromisoformat(msg["fields"]["Timestamp"]).astimezone(timezone.utc) > since_time
             ]
 
-        # Formater les messages pour la réponse JSON
-        response = [
-            {
+        response = []
+        for msg in messages:
+            response.append({
                 "role": msg["fields"]["Role"],
                 "content": msg["fields"]["Content"],
                 "timestamp": msg["fields"]["Timestamp"]
-            } 
-            for msg in messages
-        ]
+            })
+            # Marquer comme affiché
+            airtable_messages.update(msg["id"], {"Displayed": True})
+
         return jsonify({"messages": response})
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des messages : {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/", methods=["GET"])
 def health_check():
