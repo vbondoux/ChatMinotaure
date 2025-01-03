@@ -153,15 +153,16 @@ def save_message(conversation_record_id, role, content):
             "Content": content,
             "Timestamp": datetime.now().isoformat()
         }
-        airtable_messages.create(data)
-
+        record = airtable_messages.create(data)
+        record_id = record["id"]
+        
         # Notifier le client WebSocket
         notify_new_message(conversation_record_id, role, content)
 
         logger.info(f"Message enregistré avec succès : {data}")
 
         # Marquer le message comme affiché si nécessaire
-        airtable_messages.update(message_id, {"Displayed": True})
+        airtable_messages.update(record_id, {"Displayed": True})
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
