@@ -356,7 +356,7 @@ def mark_message_as_displayed(message_id):
         logger.info(f"Message {message_id} marqué comme affiché.")
         return jsonify({"status": "success", "message": f"Message {message_id} marqué comme affiché."}), 200
     except Exception as e:
-        logger.error(f"Erreur lors de la mise à jour de 'Displayed' pour le message {message_id}: {e}")
+        logger.error(f"Erreur lors de la mise à jour de 'Displayed' pour le message spécifique {message_id}: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
