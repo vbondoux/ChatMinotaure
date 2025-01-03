@@ -66,11 +66,12 @@ def verify_slack_request(request):
     return hmac.compare_digest(my_signature, slack_signature)
 
 # Fonction pour notifier un nouvel événement de message via WebSocket
-def notify_new_message(conversation_id, role, content):
+def notify_new_message(conversation_id, role, content, message_id):
     socketio.emit("new_message", {
         "conversation_id": conversation_id,
         "role": role,
-        "content": content
+        "content": content,
+        "id": message_id  # Inclure l'ID du message
     })
 
 # Fonction pour envoyer un message sur Slack
@@ -143,7 +144,7 @@ def create_conversation(user=None):
         return None, None
 
 # Fonction pour enregistrer un message
-def save_message(conversation_record_id, role, content):
+def save_message(conversation_record_id, role, content, displayed=False):
     try:
         message_id = str(uuid.uuid4())
         data = {
@@ -151,13 +152,13 @@ def save_message(conversation_record_id, role, content):
             "ConversationID": [conversation_record_id],
             "Role": role,
             "Content": content,
-            "Timestamp": datetime.now().isoformat()
+            "Timestamp": datetime.now().isoformat(),
+            "Displayed": displayed  # Ajout explicite du statut Displayed
         }
-        airtable_messages.create(data)
-       
+        record = airtable_messages.create(data)
         
         # Notifier le client WebSocket
-        notify_new_message(conversation_record_id, role, content)
+        notify_new_message(conversation_record_id, role, content, record["id"])
 
         logger.info(f"Message enregistré avec succès : {data}")
 
@@ -194,7 +195,7 @@ def chat_with_minotaure():
                 context.append({"role": msg["fields"]["Role"], "content": msg["fields"]["Content"]})
 
         record_id = records[0].get("id")
-        save_message(record_id, "user", user_message)
+        save_message(record_id, "user", user_message, displayed=True)
         context.append({"role": "user", "content": user_message})
 
         # Vérifiez si le mode est manuel
@@ -258,10 +259,10 @@ def slack_events():
                         logger.info(f"Mode mis à jour en 'manuel' pour la conversation {conversation_id}.")
 
                     # Notifier le client WebSocket du message utilisateur
-                    notify_new_message(conversation_id, "assistant", user_message)
+                    notify_new_message(conversation_id, "assistant", user_message, message_id=record_id)
 
                     # Enregistrer le message dans Airtable
-                    save_message(record_id, "assistant", user_message)
+                    save_message(record_id, "assistant", user_message, displayed=False)
 
         return jsonify({"status": "ok"}), 200
     except Exception as e:
