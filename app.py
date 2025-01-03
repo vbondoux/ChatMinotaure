@@ -328,6 +328,7 @@ def get_messages(conversation_id):
         for msg in messages:
             # Ajouter le message à la réponse
             response.append({
+                "id": msg["id"],  # ID Airtable
                 "role": msg["fields"]["Role"],
                 "content": msg["fields"]["Content"],
                 "timestamp": msg["fields"]["Timestamp"]
