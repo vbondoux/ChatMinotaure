@@ -159,6 +159,9 @@ def save_message(conversation_record_id, role, content):
         notify_new_message(conversation_record_id, role, content)
 
         logger.info(f"Message enregistré avec succès : {data}")
+
+        # Marquer le message comme affiché si nécessaire
+        airtable_messages.update(message_id, {"Displayed": True})
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement du message : {e}")
 
