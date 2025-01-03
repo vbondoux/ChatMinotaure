@@ -325,7 +325,6 @@ def get_messages(conversation_id):
         formula = f"AND({{ConversationID}} = '{conversation_id}', NOT({{Displayed}}))"
         messages = airtable_messages.all(formula=formula, sort=["Timestamp"])
 
-        # Construire la réponse et mettre à jour les messages comme affichés
         response = []
         for msg in messages:
             # Ajouter le message à la réponse
@@ -334,13 +333,20 @@ def get_messages(conversation_id):
                 "content": msg["fields"]["Content"],
                 "timestamp": msg["fields"]["Timestamp"]
             })
-            # Mettre à jour la colonne Displayed
-            airtable_messages.update(msg["id"], {"Displayed": True})
 
+            # Mettre à jour la colonne Displayed
+            try:
+                airtable_messages.update(msg["id"], {"Displayed": True})
+                logger.info(f"Message {msg['id']} marqué comme affiché.")
+            except Exception as e:
+                logger.error(f"Erreur lors de la mise à jour de 'Displayed' pour le message {msg['id']}: {e}")
+
+        # Retourner la liste des messages à afficher
         return jsonify({"messages": response})
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des messages : {e}")
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route("/", methods=["GET"])
