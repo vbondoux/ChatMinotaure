@@ -321,7 +321,7 @@ def chat_reopened():
 @app.route("/messages/<conversation_id>", methods=["GET"])
 def get_messages(conversation_id):
     try:
-        # Construire la formule pour Airtable
+        time.sleep(0.1)  # Petite pause pour laisser Airtable mettre à jour les statuts
         formula = f"AND({{ConversationID}} = '{conversation_id}', NOT({{Displayed}}))"
         messages = airtable_messages.all(formula=formula, sort=["Timestamp"])
 
