@@ -1,8 +1,7 @@
-# app.py
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import openai
+from openai import OpenAI
 import os
 import logging
 from pyairtable import Api
@@ -40,7 +39,12 @@ if not all([OPENAI_API_KEY, AIRTABLE_API_KEY, BASE_ID, SLACK_BOT_TOKEN, SLACK_SI
     logger.error("Les clés API ou les variables d'environnement sont manquantes.")
     raise ValueError("Configuration incomplète.")
 
-openai.api_key = OPENAI_API_KEY
+# OpenAI
+openai.api_key = OPENAI_API_KEY  # (reste toléré)
+client = OpenAI(api_key=OPENAI_API_KEY)
+ASSISTANT_ID = "asst_yncpQqfycqlLOWe1H6Mnvu7e"  # <-- Remplace par l'ID réel de ton agent (Playground)
+
+# Airtable
 api = Api(AIRTABLE_API_KEY)
 base = api.base(BASE_ID)
 airtable_context = base.table("Context")
@@ -48,6 +52,7 @@ airtable_conversations = base.table("Conversations")
 airtable_messages = base.table("Messages")
 
 # Fonction pour vérifier les requêtes Slack
+
 def verify_slack_request(request):
     timestamp = request.headers.get("X-Slack-Request-Timestamp")
     if abs(time.time() - int(timestamp)) > 60 * 5:
@@ -66,6 +71,7 @@ def verify_slack_request(request):
     return hmac.compare_digest(my_signature, slack_signature)
 
 # Fonction pour notifier un nouvel événement de message via WebSocket
+
 def notify_new_message(conversation_id, role, content, message_id):
     socketio.emit("new_message", {
         "conversation_id": conversation_id,
@@ -75,6 +81,7 @@ def notify_new_message(conversation_id, role, content, message_id):
     })
 
 # Fonction pour envoyer un message sur Slack
+
 def send_slack_message(text, channel, thread_ts=None, manual=False):
     try:
         slack_token = SLACK_MANUAL_BOT_TOKEN if manual else SLACK_BOT_TOKEN
@@ -105,6 +112,7 @@ def send_slack_message(text, channel, thread_ts=None, manual=False):
         return None
 
 # Charger le contexte initial depuis Airtable
+
 def load_context_from_airtable():
     try:
         records = airtable_context.all(max_records=1, sort=["Timestamp"])
@@ -119,6 +127,7 @@ def load_context_from_airtable():
         return []
 
 # Fonction pour créer une nouvelle conversation
+
 def create_conversation(user=None):
     try:
         conversation_id = str(uuid.uuid4())
@@ -144,6 +153,7 @@ def create_conversation(user=None):
         return None, None
 
 # Fonction pour enregistrer un message
+
 def save_message(conversation_record_id, role, content, displayed=False):
     try:
         message_id = str(uuid.uuid4())
@@ -203,15 +213,47 @@ def chat_with_minotaure():
             send_slack_message(f":bust_in_silhouette: Visiteur : {user_message}", channel="#conversationsite", thread_ts=thread_ts)
             return jsonify({"response": None, "conversation_id": conversation_id})  # Rien n'est renvoyé au client
 
-        # Appeler OpenAI pour une réponse automatique uniquement en mode automatique
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=context,
-            temperature=0.5,
-            max_tokens=500
+        # ===============================
+        # Remplacement minimal: Agent OpenAI (Assistants API)
+        # ===============================
+        # 1) Construire un thread éphémère avec l'historique existant
+        thread_messages = []
+        for m in context:
+            role = (m.get("role") or "").lower()
+            content = m.get("content") or ""
+            if role == "system":
+                continue  # les instructions sont désormais dans l'agent
+            role = "assistant" if role == "assistant" else "user"  # normalisation
+            if content.strip():
+                thread_messages.append({"role": role, "content": content})
+
+        thread = client.beta.threads.create(messages=thread_messages)
+
+        # 2) Lancer le run auprès de l'agent et attendre la complétion
+        run = client.beta.threads.runs.create_and_poll(
+            thread_id=thread.id,
+            assistant_id=ASSISTANT_ID,
         )
 
-        assistant_message = response["choices"][0]["message"]["content"]
+        # 3) Récupérer la réponse assistant la plus récente
+        assistant_message = "(Aucune réponse)"
+        if run.status == "completed":
+            msgs = client.beta.threads.messages.list(thread_id=thread.id, limit=10)
+            for m in msgs.data:
+                if m.role == "assistant":
+                    parts = []
+                    for item in m.content:
+                        if getattr(item, "type", None) == "text":
+                            parts.append(item.text.value)
+                    text = "\n".join(parts).strip()
+                    if text:
+                        assistant_message = text
+                        break
+        else:
+            assistant_message = f"(run status: {run.status})"
+
+        # ===============================
+
         context.append({"role": "assistant", "content": assistant_message})
 
         save_message(record_id, "assistant", assistant_message)
