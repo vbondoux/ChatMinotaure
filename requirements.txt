@@ -2,9 +2,8 @@ flask
 flask-cors
 flask-socketio
 eventlet
-openai==0.28.0
-pyairtable
-textract
-werkzeug
+openai>=1.0.0
+pyairtable>=3.2.0
 requests
+werkzeug
 slack-sdk
