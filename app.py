@@ -42,7 +42,7 @@ if not all([OPENAI_API_KEY, AIRTABLE_API_KEY, BASE_ID, SLACK_BOT_TOKEN, SLACK_SI
 # OpenAI
 openai.api_key = OPENAI_API_KEY  # (reste toléré)
 client = OpenAI(api_key=OPENAI_API_KEY)
-ASSISTANT_ID = "asst_yncpQqfycqlLOWe1H6Mnvu7e"  # <-- Remplace par l'ID réel de ton agent (Playground)
+ASSISTANT_ID = "asst_M2vXRRQZaRqHxyU17qJa9t0c"  # <-- Remplace par l'ID réel de ton agent (Playground)
 
 # Airtable
 api = Api(AIRTABLE_API_KEY)
